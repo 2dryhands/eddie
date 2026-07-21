@@ -47,6 +47,9 @@ eddie open plan.md
 eddie await plan.md
 ```
 
+Add `open --no-open` when driving Eddie headless (automated tests, CI, or a
+scripted verification pass) to skip launching a real browser window.
+
 `await` prints JSON when the human acts:
 
 ```json
@@ -67,8 +70,7 @@ keep listening in one call**:
 ```bash
 eddie await plan.md \
   --reply "Split Phase 2 as requested, see updated section 3" \
-  --resolve "fb-1:done:Split into 3a/3b" \
-  --resolve "fb-2:done:" 
+  --resolve "fb-1:done:Split into 3a/3b"
 ```
 
 **4. End** when review concludes: `eddie end plan.md`.
@@ -132,13 +134,15 @@ These apply to every artifact you open in Eddie, on every revision:
 - **Baseline first in comparisons.** Any before/after, A/B, or multi-variant
   comparison puts the original/baseline first, with a legend and a one-line
   methodology note (what's compared, over what period, from what source).
-- **Mark changes yourself in HTML artifacts.** Markdown artifacts get
-  automatic change highlighting (Eddie diffs rendered text blocks against
-  the last-seen baseline and flags what changed). Hand-authored `.html`
-  artifacts do **not** get this for free — their markup doesn't line up with
-  Eddie's block-level diffing, so visually flag what changed yourself (a
-  "changed" class/badge, a highlighted border, an inline note) on every
-  revision.
+- **Change highlighting works by tag, not by file type.** Eddie diffs
+  rendered `p, h1–h6, li, td, th, pre, blockquote` blocks against the
+  last-seen baseline and flags what changed. Markdown artifacts always
+  render through these tags, so they always get it for free. Hand-authored
+  `.html` artifacts only get it when their content actually uses these
+  standard text tags — a `<div>`-heavy layout (custom cards, flex/grid
+  dashboards) has nothing for the block-level diff to match, so those
+  artifacts need you to visually flag what changed yourself (a "changed"
+  class/badge, a highlighted border, an inline note) on every revision.
 
 ## Rules
 

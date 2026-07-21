@@ -184,9 +184,30 @@ async function main() {
     assert.ok(res.body.includes('<h1 id="plan-demo">'));
     assert.ok(res.body.includes('<table>'));
     assert.ok(res.body.includes('<script src="/sdk.js">'));
-    assert.strictEqual(res.headers['content-security-policy'], undefined);
+    // csp:false path still ships the clickjacking guard, just without the
+    // rest of the CSP (the artifact's own inline scripts need to run).
+    assert.strictEqual(res.headers['content-security-policy'], "frame-ancestors 'self'");
     // No diagram in this plan → no Mermaid loader shipped.
     assert.ok(!res.body.includes('mermaid.run'));
+  })) passed++; else failed++;
+
+  if (await test('frame-ancestors clickjacking guard is present on every HTML response', async () => {
+    const canvasRes = await request(port, 'GET', `/canvas/${key}`);
+    assert.ok(
+      canvasRes.headers['content-security-policy'].includes("frame-ancestors 'self'"),
+      '/canvas/:key (csp:true path) must include frame-ancestors'
+    );
+    const artifactRes = await request(port, 'GET', `/artifact/${key}/`);
+    assert.strictEqual(
+      artifactRes.headers['content-security-policy'],
+      "frame-ancestors 'self'",
+      '/artifact/:key/ (csp:false path) must still send frame-ancestors only'
+    );
+    const listRes = await request(port, 'GET', '/');
+    assert.ok(
+      listRes.headers['content-security-policy'].includes("frame-ancestors 'self'"),
+      'GET / (session list, csp:true path) must include frame-ancestors'
+    );
   })) passed++; else failed++;
 
   if (await test('a plan containing ```mermaid serves the themed Mermaid loader', async () => {
@@ -230,6 +251,15 @@ async function main() {
     assert.ok(sdk.body.includes('pc-changed'), 'sdk.js should define the pc-changed highlight class');
     const client = await request(port, 'GET', '/client.js');
     assert.ok(client.body.includes('eddie:baseline:'), 'client.js should key the baseline snapshot in sessionStorage');
+  })) passed++; else failed++;
+
+  if (await test('client.js rejects iframe-sourced verdict items (anti-spoofing guard)', async () => {
+    const client = await request(port, 'GET', '/client.js');
+    assert.ok(
+      client.body.includes("QUEUEABLE_KINDS = new Set(['annotation', 'edit', 'chat'])"),
+      'client.js should only accept annotation/edit/chat items from the iframe, never verdict'
+    );
+    assert.ok(!client.body.includes("item.kind === 'verdict'"), 'renderQueue must not special-case verdict pills anymore');
   })) passed++; else failed++;
 
   if (await test('await with timeoutMs returns waiting when idle', async () => {

@@ -25,8 +25,6 @@ npx github:2dryhands/eddie open plan.md
 `open` возвращается сразу же и открывает файл в браузере. Дальше агент
 вызывает `eddie await <file>` и блокируется, пока человек не отреагирует.
 
-![Eddie canvas](docs/screenshot.png)
-
 ### Цикл ревью
 
 ```mermaid
@@ -110,8 +108,6 @@ npx github:2dryhands/eddie open plan.md
 
 `open` returns immediately and opens the file in the browser. The agent then
 calls `eddie await <file>` and blocks until the human responds.
-
-![Eddie canvas](docs/screenshot.png)
 
 ### Review loop
 

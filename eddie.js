@@ -246,12 +246,26 @@ async function cmdAwait(file, args, { stateDir, port }) {
   const reply = valueAfter(args, '--reply');
   if (reply) {
     const key = sessionKeyFor(canonicalizeArtifactPath(file));
-    await request(port, 'POST', `/api/session/${key}/reply`, { text: reply });
+    const res = await request(port, 'POST', `/api/session/${key}/reply`, { text: reply });
+    if (res.statusCode !== 200) {
+      process.stderr.write(
+        `[eddie] --reply failed (HTTP ${res.statusCode}): ${res.body.error || 'unknown error'} — the reply did not reach the canvas; the await below still runs\n`
+      );
+    }
   }
   const resolutions = parseResolveArgs(args);
   if (resolutions.length) {
     const key = sessionKeyFor(canonicalizeArtifactPath(file));
-    await request(port, 'POST', `/api/session/${key}/resolve`, { resolutions });
+    const res = await request(port, 'POST', `/api/session/${key}/resolve`, { resolutions });
+    if (res.statusCode !== 200) {
+      process.stderr.write(
+        `[eddie] --resolve failed (HTTP ${res.statusCode}): ${res.body.error || 'unknown error'} — tasks may still show unresolved; the await below still runs\n`
+      );
+    } else if ((res.body.updated || 0) < resolutions.length) {
+      process.stderr.write(
+        `[eddie] --resolve only updated ${res.body.updated || 0} of ${resolutions.length} task(s) — check the ids match ones from a previous await\n`
+      );
+    }
   }
   const timeoutRaw = valueAfter(args, '--timeout-ms');
   const timeoutMs = timeoutRaw === null ? null : Number.parseInt(timeoutRaw, 10) || 0;

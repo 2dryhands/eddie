@@ -1,6 +1,7 @@
 MIT License
 
 Copyright (c) 2026 Affaan Mustafa
+Copyright (c) 2026 2dryhands (Eddie modifications)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,5 +20,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-Portions derived from everything-claude-code (c) Affaan Mustafa, MIT — https://github.com/affaan-m/everything-claude-code (plan-canvas), itself inspired by lavish-axi.

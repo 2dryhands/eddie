@@ -202,6 +202,25 @@ async function main() {
       assert.strictEqual(feedback.items[0].verdict, 'approve');
     });
 
+    await test('--resolve with an unknown id warns on stderr but the await still completes', async () => {
+      // fb-does-not-exist can never match a real task id, so the server
+      // reports { updated: 0 } (still HTTP 200) — the CLI must warn about
+      // the shortfall rather than silently pretending it worked.
+      const result = cli(env, ['await', plan, '--resolve', 'fb-does-not-exist:done:whatever', '--timeout-ms', '400']);
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.strictEqual(result.parsed.status, 'waiting');
+      assert.ok(result.stderr.includes('only updated 0 of 1'), result.stderr);
+    });
+
+    await test('--reply on a file with no session warns on stderr but the await still completes', async () => {
+      const strayFile = path.join(plansDir, 'stray.plan.md');
+      fs.writeFileSync(strayFile, '# Stray\n');
+      const result = cli(env, ['await', strayFile, '--reply', 'hello nobody', '--timeout-ms', '200']);
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.strictEqual(result.parsed.status, 'missing');
+      assert.ok(result.stderr.includes('--reply failed'), result.stderr);
+    });
+
     await test('user ends the session; plain reopen is refused, --reopen works', async () => {
       await request(port, 'POST', `/api/session/${key}/end`);
       const refused = cli(env, ['open', plan, '--no-open']);

@@ -217,6 +217,30 @@ function runTests() {
     assert.deepStrictEqual(reloaded.list(), []);
   })) passed++; else failed++;
 
+  if (test('a session missing chat/pendingFeedback/tasks arrays is normalized on load, not thrown on', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'eddie-sessions-partial-'));
+    fixtures.push({ dir });
+    const stateDir = path.join(dir, 'state');
+    fs.mkdirSync(stateDir, { recursive: true });
+    const stateFile = path.join(stateDir, 'sessions.json');
+    // Hand-written, valid JSON but a session record missing the array fields
+    // real writes always include — simulates a partially-corrupt file.
+    fs.writeFileSync(stateFile, JSON.stringify({
+      feedbackCounter: 0,
+      sessions: {
+        deadbeef0001: { key: 'deadbeef0001', file: '/tmp/broken.md', status: 'open' }
+      }
+    }, null, 2));
+    const store = createSessionStore({ stateDir });
+    assert.doesNotThrow(() => store.list(), 'list() must not throw on a session missing pendingFeedback');
+    assert.deepStrictEqual(store.list()[0], {
+      key: 'deadbeef0001', file: '/tmp/broken.md', status: 'open', endedBy: undefined, pending: 0, updatedAt: undefined
+    });
+    let result;
+    assert.doesNotThrow(() => { result = store.takeFeedback('deadbeef0001'); }, 'takeFeedback() must not throw');
+    assert.strictEqual(result.status, 'waiting');
+  })) passed++; else failed++;
+
   if (test('addAgentReply appends to the transcript', () => {
     const fx = makeFixture();
     fixtures.push(fx);
