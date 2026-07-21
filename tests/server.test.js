@@ -171,7 +171,7 @@ async function main() {
     assert.ok(res.headers['content-security-policy'].includes("default-src 'self'"));
     assert.ok(res.body.includes('Plan Canvas'));
     assert.ok(res.body.includes('pc-session'));
-    assert.ok(res.body.includes('Approve plan'));
+    assert.ok(res.body.includes('data-i18n="approve"'));
     assert.ok(res.body.includes('sandbox="allow-scripts allow-forms allow-popups"'));
   })) passed++; else failed++;
 

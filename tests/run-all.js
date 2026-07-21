@@ -1,7 +1,7 @@
 'use strict';
 const { spawnSync } = require('child_process');
 const path = require('path');
-const files = ['sessions.test.js', 'markdown.test.js', 'server.test.js', 'e2e.test.js'];
+const files = ['i18n.test.js', 'sessions.test.js', 'markdown.test.js', 'server.test.js', 'e2e.test.js'];
 let failed = false;
 for (const file of files) {
   console.log(`\n== ${file} ==`);
