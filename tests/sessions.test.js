@@ -11,6 +11,7 @@ const path = require('path');
 
 const {
   canonicalizeArtifactPath,
+  chatLineFor,
   createSessionStore,
   normalizeFeedbackItem,
   sessionKeyFor
@@ -91,6 +92,18 @@ function runTests() {
       anchor: { selector: 'p' } }, 2), null);
     assert.strictEqual(normalizeFeedbackItem({ kind: 'edit', edit: { before: '', after: 'y' },
       anchor: { selector: 'p' } }, 3), null);
+  })) passed++; else failed++;
+
+  if (test('chatLineFor renders edit as «before» → «after» with 80-char truncation', () => {
+    assert.strictEqual(
+      chatLineFor({ kind: 'edit', edit: { before: 'старый текст', after: 'новый текст' } }),
+      '✏️ «старый текст» → «новый текст»'
+    );
+    const longBefore = 'a'.repeat(85);
+    assert.strictEqual(
+      chatLineFor({ kind: 'edit', edit: { before: longBefore, after: 'ok' } }),
+      '✏️ «' + 'a'.repeat(80) + '» → «ok»'
+    );
   })) passed++; else failed++;
 
   console.log('\nOpen / reopen semantics:');
