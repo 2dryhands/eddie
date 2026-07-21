@@ -173,6 +173,8 @@ async function main() {
     assert.ok(res.body.includes('pc-session'));
     assert.ok(res.body.includes('data-i18n="approve"'));
     assert.ok(res.body.includes('sandbox="allow-scripts allow-forms allow-popups"'));
+    assert.ok(res.body.includes('id="tasks"'));
+    assert.ok(res.body.includes('data-i18n="tasksHeader"'));
   })) passed++; else failed++;
 
   if (await test('markdown artifacts render in the ECC plan template with the SDK', async () => {
