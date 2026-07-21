@@ -1,5 +1,5 @@
 /**
- * End-to-end test for Plan Canvas: the complete review workflow through the
+ * End-to-end test for Eddie: the complete review workflow through the
  * real CLI (eddie.js) and a real detached server process, with
  * the browser side simulated over the same HTTP surface the chrome uses.
  *
@@ -80,7 +80,7 @@ function request(port, method, requestPath, body = null) {
 }
 
 async function main() {
-  console.log('\n=== Plan Canvas end-to-end workflow ===\n');
+  console.log('\n=== Eddie end-to-end workflow ===\n');
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'eddie-e2e-'));
   const stateDir = path.join(tmp, 'state');
@@ -129,7 +129,7 @@ async function main() {
     await test('browser loads the canvas chrome and the rendered plan', async () => {
       const chrome = await request(port, 'GET', `/canvas/${key}`);
       assert.strictEqual(chrome.statusCode, 200);
-      assert.ok(chrome.body.includes('Plan Canvas'));
+      assert.ok(chrome.body.includes('· Eddie'), 'canvas title includes brand');
       assert.ok(chrome.body.includes('notifications.plan.md'));
       const doc = await request(port, 'GET', `/artifact/${key}/`);
       assert.ok(doc.body.includes('<h1 id="plan-real-time-notifications">'));

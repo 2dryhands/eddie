@@ -1,5 +1,5 @@
 /**
- * Integration tests for the Plan Canvas server (lib/).
+ * Integration tests for the Eddie server (lib/).
  *
  * Spins up the real HTTP server in-process and drives it exactly like the
  * browser chrome (fetch + SSE) and the agent CLI (long-poll) do.
@@ -165,11 +165,12 @@ async function main() {
     assert.strictEqual(res.statusCode, 404);
   })) passed++; else failed++;
 
-  if (await test('GET /canvas/:key serves the ECC chrome with CSP', async () => {
+  if (await test('GET /canvas/:key serves the Eddie chrome with CSP', async () => {
     const res = await request(port, 'GET', `/canvas/${key}`);
     assert.strictEqual(res.statusCode, 200);
     assert.ok(res.headers['content-security-policy'].includes("default-src 'self'"));
-    assert.ok(res.body.includes('Plan Canvas'));
+    assert.ok(res.body.includes('<title>demo.plan.md · Eddie</title>'), 'canvas title includes brand');
+    assert.ok(res.body.includes('<span class="name">Eddie</span>'), 'brand name is Eddie');
     assert.ok(res.body.includes('pc-session'));
     assert.ok(res.body.includes('data-i18n="approve"'));
     assert.ok(res.body.includes('sandbox="allow-scripts allow-forms allow-popups"'));
@@ -177,7 +178,7 @@ async function main() {
     assert.ok(res.body.includes('data-i18n="tasksHeader"'));
   })) passed++; else failed++;
 
-  if (await test('markdown artifacts render in the ECC plan template with the SDK', async () => {
+  if (await test('markdown artifacts render in the Eddie plan template with the SDK', async () => {
     const res = await request(port, 'GET', `/artifact/${key}/`);
     assert.strictEqual(res.statusCode, 200);
     assert.ok(res.body.includes('<h1 id="plan-demo">'));
@@ -347,9 +348,9 @@ async function main() {
     assert.strictEqual(res.statusCode, 409);
   })) passed++; else failed++;
 
-  if (await test('GET / lists sessions in the ECC shell', async () => {
+  if (await test('GET / lists sessions in the Eddie shell', async () => {
     const res = await request(port, 'GET', '/');
-    assert.ok(res.body.includes('Plan Canvas sessions'));
+    assert.ok(res.body.includes('Eddie'), 'session list mentions Eddie');
     assert.ok(res.body.includes('demo.plan.md'));
   })) passed++; else failed++;
 

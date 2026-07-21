@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Plan Canvas CLI — open plan artifacts in a browser review canvas and block
+ * Eddie CLI — open plan artifacts in a browser review canvas and block
  * on human feedback.
  *
  *   node eddie.js open .claude/plans/feature.plan.md
@@ -39,7 +39,7 @@ const VERSION = require('./package.json').version;
 
 function usage() {
   return [
-    'Plan Canvas - review plans and HTML artifacts in the browser',
+    'Eddie - review plans and HTML artifacts in the browser',
     '',
     'Usage:',
     '  node eddie.js                      Show server status and sessions',
@@ -125,7 +125,7 @@ function sleep(ms) {
 }
 
 // Start (or reuse) the detached canvas server and return its port. A version
-// mismatch after an ECC update restarts the server so browser and CLI never
+// mismatch after an Eddie update restarts the server so browser and CLI never
 // disagree about the protocol.
 async function ensureServer({ stateDir, port }) {
   const health = await healthCheck(port);
