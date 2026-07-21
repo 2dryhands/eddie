@@ -348,6 +348,31 @@ async function main() {
     await waitFor(() => idleFired);
   })) passed++; else failed++;
 
+  if (await test('resolve marks a task done and broadcasts task-sync', async () => {
+    const resolveArtifact = path.join(tmp, 'resolve.plan.md');
+    fs.writeFileSync(resolveArtifact, '# Resolve me\n');
+    const opened = jsonBody(await request(port, 'POST', '/api/sessions', { body: { file: resolveArtifact } }));
+    const resolveKey = opened.key;
+    await request(port, 'POST', `/api/session/${resolveKey}/feedback`, { body: { items: [{ kind: 'chat', text: 'q' }] } });
+    const awaited = jsonBody(await request(port, 'GET', `/api/await?file=${encodeURIComponent(resolveArtifact)}`));
+    assert.strictEqual(awaited.status, 'feedback');
+    const fbId = awaited.items[0].id;
+
+    const res = await request(port, 'POST', `/api/session/${resolveKey}/resolve`, {
+      body: { resolutions: [{ id: fbId, status: 'done', note: 'ok' }] }
+    });
+    assert.strictEqual(res.statusCode, 200);
+    assert.deepStrictEqual(jsonBody(res), { status: 'resolved', updated: 1 });
+
+    const sessions = await request(port, 'GET', '/api/sessions');
+    assert.strictEqual(sessions.statusCode, 200);
+
+    const again = await request(port, 'GET', `/api/await?file=${encodeURIComponent(resolveArtifact)}&timeoutMs=100`);
+    assert.strictEqual(jsonBody(again).status, 'waiting');
+
+    await request(port, 'POST', '/api/end', { body: { file: resolveArtifact } });
+  })) passed++; else failed++;
+
   if (await test('close() settles a held long-poll instead of hanging', async () => {
     await request(port, 'POST', '/api/sessions', { body: { file: artifact, reopen: true } });
     const held = request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}`);

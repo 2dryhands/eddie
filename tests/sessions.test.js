@@ -208,6 +208,53 @@ function runTests() {
     assert.strictEqual(fx.store.hasOpenSessions(), false);
   })) passed++; else failed++;
 
+  console.log('\nTasks (feedback lifecycle):');
+
+  if (test('takeFeedback turns annotation/chat items into tasks with status sent', () => {
+    const fx = makeFixture();
+    fixtures.push(fx);
+    const { session } = fx.store.open(fx.artifact);
+    fx.store.queueFeedback(session.key, [
+      { kind: 'annotation', text: 'move this', anchor: { selector: 'p', tag: 'p', snippet: 'x' } },
+      { kind: 'chat', text: 'why?' },
+      { kind: 'verdict', verdict: 'approve' }
+    ]);
+    fx.store.takeFeedback(session.key);
+    const tasks = fx.store.get(session.key).tasks;
+    assert.strictEqual(tasks.length, 2); // verdict задачей не становится
+    assert.ok(tasks.every(t => t.status === 'sent'));
+  })) passed++; else failed++;
+
+  if (test('resolveTasks updates status and note, ignores unknown ids', () => {
+    const fx = makeFixture();
+    fixtures.push(fx);
+    const { session } = fx.store.open(fx.artifact);
+    fx.store.queueFeedback(session.key, [{ kind: 'chat', text: 'q' }]);
+    fx.store.takeFeedback(session.key);
+    const id = fx.store.get(session.key).tasks[0].id;
+    const res = fx.store.resolveTasks(session.key, [
+      { id, status: 'answered', note: 'см. чат' },
+      { id: 'fb-99999', status: 'done', note: 'nope' }
+    ]);
+    assert.strictEqual(res.updated, 1);
+    const task = fx.store.get(session.key).tasks[0];
+    assert.strictEqual(task.status, 'answered');
+    assert.strictEqual(task.note, 'см. чат');
+    assert.ok(task.resolvedAt);
+  })) passed++; else failed++;
+
+  if (test('tasks survive a store reload (server restart)', () => {
+    const fx = makeFixture();
+    fixtures.push(fx);
+    const { session } = fx.store.open(fx.artifact);
+    fx.store.queueFeedback(session.key, [{ kind: 'chat', text: 'persist me too' }]);
+    fx.store.takeFeedback(session.key);
+    const reloaded = createSessionStore({ stateDir: fx.store.stateDir });
+    const tasks = reloaded.get(session.key).tasks;
+    assert.strictEqual(tasks.length, 1);
+    assert.strictEqual(tasks[0].status, 'sent');
+  })) passed++; else failed++;
+
   for (const fx of fixtures) {
     try {
       fs.rmSync(fx.dir, { recursive: true, force: true });

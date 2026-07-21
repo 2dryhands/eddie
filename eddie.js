@@ -53,6 +53,7 @@ function usage() {
     '  open:  --no-open      Do not launch a browser window',
     '         --reopen       Reopen a session the user ended from the browser',
     '  await: --reply <msg>  Show an agent reply in the canvas chat before waiting',
+    '         --resolve <id>:<status>:<note>   Mark a task done|answered|declined (repeatable)',
     '         --timeout-ms <n>  Return {status:"waiting"} after n ms (tests/debug only)',
     '  server: --port <n> --host <h>',
     '',
@@ -232,6 +233,17 @@ async function cmdAwait(file, args, { stateDir, port }) {
   if (reply) {
     const key = sessionKeyFor(canonicalizeArtifactPath(file));
     await request(port, 'POST', `/api/session/${key}/reply`, { text: reply });
+  }
+  const resolutions = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] !== '--resolve' || !args[i + 1]) continue;
+    const m = /^([^:]+):(done|answered|declined):([\s\S]*)$/.exec(args[i + 1]);
+    if (m) resolutions.push({ id: m[1], status: m[2], note: m[3] });
+    else process.stderr.write(`[eddie] bad --resolve "${args[i + 1]}", expected id:status:note (status: done|answered|declined)\n`);
+  }
+  if (resolutions.length) {
+    const key = sessionKeyFor(canonicalizeArtifactPath(file));
+    await request(port, 'POST', `/api/session/${key}/resolve`, { resolutions });
   }
   const timeoutRaw = valueAfter(args, '--timeout-ms');
   const timeoutMs = timeoutRaw === null ? null : Number.parseInt(timeoutRaw, 10) || 0;
