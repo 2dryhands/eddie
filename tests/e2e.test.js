@@ -23,6 +23,8 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 
+const { createSessionStore } = require('../lib/sessions');
+
 const CLI = path.join(__dirname, '..', 'eddie.js');
 
 const results = [];
@@ -215,6 +217,117 @@ async function main() {
       assert.strictEqual(result.parsed.status, 'ended');
       assert.strictEqual(result.parsed.endedBy, 'user');
       assert.ok(result.parsed.next_step.includes('Stop polling'));
+    });
+
+    await test('full cycle: one batch (annotation+edit+verdict) lands as one payload; resolve persists across a fresh store load', async () => {
+      // Independent session/file so this scenario never touches the
+      // open/end/reopen state the earlier tests already drove for `plan`.
+      const plan2 = path.join(plansDir, 'billing-webhooks.plan.md');
+      fs.writeFileSync(
+        plan2,
+        [
+          '# Plan: Billing Webhooks',
+          '',
+          '**Complexity**: Medium',
+          '',
+          '## Summary',
+          'Add webhook delivery for billing events.',
+          '',
+          '## Tasks',
+          '### Task 1: Schema',
+          '- **Action**: add billing_events table',
+          ''
+        ].join('\n')
+      );
+
+      const opened = cli(env, ['open', plan2, '--no-open']);
+      assert.strictEqual(opened.status, 0, opened.stderr);
+      assert.strictEqual(opened.parsed.status, 'open');
+      const key2 = opened.parsed.url.split('/canvas/')[1];
+
+      let awaitStdout2 = '';
+      const awaitChild2 = spawn('node', [CLI, 'await', plan2], { env: { ...process.env, ...env } });
+      awaitChild2.stdout.on('data', chunk => {
+        awaitStdout2 += chunk;
+      });
+      const exited2 = new Promise(resolve => awaitChild2.on('close', resolve));
+
+      // One browser-side batch carrying all three feedback kinds at once.
+      const post = await request(port, 'POST', `/api/session/${key2}/feedback`, {
+        items: [
+          {
+            kind: 'annotation',
+            text: 'Also emit an audit log entry',
+            anchor: { selector: 'h3:nth-of-type(1)', tag: 'h3', snippet: 'Task 1: Schema' }
+          },
+          {
+            kind: 'edit',
+            anchor: { selector: 'p:nth-of-type(1)', tag: 'p', snippet: 'Add webhook delivery for billing events.' },
+            edit: {
+              before: 'Add webhook delivery for billing events.',
+              after: 'Add webhook delivery for billing events with retries.'
+            }
+          },
+          { kind: 'verdict', verdict: 'approve' }
+        ]
+      });
+      assert.strictEqual(post.statusCode, 200);
+      const posted = JSON.parse(post.body);
+      assert.strictEqual(posted.accepted, 3, 'server accepts all 3 batched items');
+
+      await exited2;
+      const feedback2 = JSON.parse(awaitStdout2.trim());
+      assert.strictEqual(feedback2.status, 'feedback');
+      // Single-payload property: one batch -> one await response carrying
+      // all 3 kinds together, not 3 separate round trips.
+      assert.strictEqual(feedback2.items.length, 3, 'one batch delivers annotation + edit + verdict in a single await payload');
+      assert.strictEqual(feedback2.items[0].kind, 'annotation');
+      assert.strictEqual(feedback2.items[1].kind, 'edit');
+      assert.strictEqual(feedback2.items[1].edit.after, 'Add webhook delivery for billing events with retries.');
+      assert.strictEqual(feedback2.items[2].kind, 'verdict');
+      assert.strictEqual(feedback2.items[2].verdict, 'approve');
+
+      const annotationId = feedback2.items[0].id;
+      const editId = feedback2.items[1].id;
+
+      const resolved = cli(env, [
+        'await',
+        plan2,
+        '--resolve',
+        `${annotationId}:done:Audit log added in the same PR`,
+        '--timeout-ms',
+        '400'
+      ]);
+      assert.strictEqual(resolved.status, 0, resolved.stderr);
+      assert.strictEqual(resolved.parsed.status, 'waiting');
+
+      const sessions = await request(port, 'GET', '/api/sessions');
+      const sessionsBody = JSON.parse(sessions.body);
+      const session2 = sessionsBody.sessions.find(s => s.key === key2);
+      assert.ok(session2, 'session appears in /api/sessions');
+      assert.strictEqual(session2.pending, 0, 'the whole batch was drained by the single await; nothing left pending');
+
+      // Task persistence across a store restart: a brand new
+      // createSessionStore instance reads the same persisted stateDir cold,
+      // exactly as the real server does on boot (mirrors the unit-level
+      // check in tests/sessions.test.js, "tasks survive a store reload").
+      // Chosen over spawning a second server process on the same stateDir:
+      // this exercises the identical on-disk contract (sessions.json) with
+      // no port/process bookkeeping, and matches the brief's own wording
+      // ("новый createSessionStore на том же stateDir").
+      const reloadedStore = createSessionStore({ stateDir });
+      const restarted = reloadedStore.get(key2);
+      assert.ok(restarted, 'session survives a fresh store load from the same stateDir');
+      assert.strictEqual(restarted.tasks.length, 2, 'annotation + edit became tasks; verdict never becomes a task');
+      const annotationTask = restarted.tasks.find(t => t.id === annotationId);
+      const editTask = restarted.tasks.find(t => t.id === editId);
+      assert.ok(annotationTask && editTask, 'both tasks persisted with their ids');
+      assert.strictEqual(annotationTask.status, 'done', 'the resolved task kept its status across the reload');
+      assert.strictEqual(annotationTask.note, 'Audit log added in the same PR');
+      assert.strictEqual(editTask.status, 'sent', 'the untouched task kept its original status across the reload');
+
+      const ended2 = cli(env, ['end', plan2]);
+      assert.strictEqual(ended2.parsed.endedBy, 'agent');
     });
 
     await test('agent end + status + stop shut everything down', async () => {
