@@ -224,6 +224,20 @@ function awaitRequest(port, file, timeoutMs) {
   });
 }
 
+// Parse repeatable `--resolve "<id>:<status>:<note>"` flags. The note is the
+// greedy tail, so it may itself contain colons; malformed values are warned
+// about (stderr by default) and skipped rather than aborting the await.
+function parseResolveArgs(args, warn = msg => process.stderr.write(msg)) {
+  const resolutions = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] !== '--resolve' || !args[i + 1]) continue;
+    const m = /^([^:]+):(done|answered|declined):([\s\S]*)$/.exec(args[i + 1]);
+    if (m) resolutions.push({ id: m[1], status: m[2], note: m[3] });
+    else warn(`[eddie] bad --resolve "${args[i + 1]}", expected id:status:note (status: done|answered|declined)\n`);
+  }
+  return resolutions;
+}
+
 async function cmdAwait(file, args, { stateDir, port }) {
   if (!file) throw new Error('await requires a file path');
   if (!(await healthCheck(port))) {
@@ -234,13 +248,7 @@ async function cmdAwait(file, args, { stateDir, port }) {
     const key = sessionKeyFor(canonicalizeArtifactPath(file));
     await request(port, 'POST', `/api/session/${key}/reply`, { text: reply });
   }
-  const resolutions = [];
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] !== '--resolve' || !args[i + 1]) continue;
-    const m = /^([^:]+):(done|answered|declined):([\s\S]*)$/.exec(args[i + 1]);
-    if (m) resolutions.push({ id: m[1], status: m[2], note: m[3] });
-    else process.stderr.write(`[eddie] bad --resolve "${args[i + 1]}", expected id:status:note (status: done|answered|declined)\n`);
-  }
+  const resolutions = parseResolveArgs(args);
   if (resolutions.length) {
     const key = sessionKeyFor(canonicalizeArtifactPath(file));
     await request(port, 'POST', `/api/session/${key}/resolve`, { resolutions });
@@ -348,4 +356,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main, ensureServer, healthCheck };
+module.exports = { main, ensureServer, healthCheck, parseResolveArgs };

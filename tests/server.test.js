@@ -373,6 +373,62 @@ async function main() {
     await request(port, 'POST', '/api/end', { body: { file: resolveArtifact } });
   })) passed++; else failed++;
 
+  if (await test('task-sync SSE: initial frame on connect, after drain, after resolve', async () => {
+    const syncArtifact = path.join(tmp, 'tasksync.plan.md');
+    fs.writeFileSync(syncArtifact, '# Task sync\n');
+    const opened = jsonBody(await request(port, 'POST', '/api/sessions', { body: { file: syncArtifact } }));
+    const syncKey = opened.key;
+
+    const sse = openSse(port, syncKey);
+    await sse.ready;
+    // (a) initial frame arrives on connect, before any tasks exist.
+    await waitFor(() => sse.received.some(e => e.event === 'task-sync'));
+    assert.deepStrictEqual(sse.received.find(e => e.event === 'task-sync').data.tasks, []);
+
+    // (b) draining feedback via await broadcasts the new task with status 'sent'.
+    await request(port, 'POST', `/api/session/${syncKey}/feedback`, { body: { items: [{ kind: 'chat', text: 'do it' }] } });
+    const awaited = jsonBody(await request(port, 'GET', `/api/await?file=${encodeURIComponent(syncArtifact)}`));
+    assert.strictEqual(awaited.status, 'feedback');
+    const taskId = awaited.items[0].id;
+    await waitFor(() =>
+      sse.received.some(e => e.event === 'task-sync' && e.data.tasks.some(t => t.id === taskId && t.status === 'sent'))
+    );
+
+    // (c) resolving broadcasts the task with its new status and note.
+    await request(port, 'POST', `/api/session/${syncKey}/resolve`, {
+      body: { resolutions: [{ id: taskId, status: 'done', note: 'готово' }] }
+    });
+    await waitFor(() =>
+      sse.received.some(
+        e => e.event === 'task-sync' && e.data.tasks.some(t => t.id === taskId && t.status === 'done' && t.note === 'готово')
+      )
+    );
+
+    sse.close();
+    await request(port, 'POST', '/api/end', { body: { file: syncArtifact } });
+  })) passed++; else failed++;
+
+  if (await test('CLI parseResolveArgs keeps colons in notes and skips malformed values', async () => {
+    const { parseResolveArgs } = require('../eddie.js');
+    const warnings = [];
+    const parsed = parseResolveArgs(
+      [
+        '--resolve', 'fb-1:done:см. 10:30, faq:',
+        '--resolve', 'no-colons-here',
+        '--resolve', 'fb-2:maybe:nope',
+        '--resolve', 'fb-3:answered:'
+      ],
+      msg => warnings.push(msg)
+    );
+    assert.deepStrictEqual(parsed, [
+      { id: 'fb-1', status: 'done', note: 'см. 10:30, faq:' },
+      { id: 'fb-3', status: 'answered', note: '' }
+    ]);
+    assert.strictEqual(warnings.length, 2);
+    assert.ok(warnings[0].includes('no-colons-here'));
+    assert.ok(warnings[1].includes('fb-2:maybe:nope'));
+  })) passed++; else failed++;
+
   if (await test('close() settles a held long-poll instead of hanging', async () => {
     await request(port, 'POST', '/api/sessions', { body: { file: artifact, reopen: true } });
     const held = request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}`);
