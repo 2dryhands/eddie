@@ -156,6 +156,20 @@ function runTests() {
     assert.ok(chat[1].text.includes('Approved the plan'));
   })) passed++; else failed++;
 
+  if (test('queueFeedback mirrors a verdict item with verdict + vtext for client-side localization', () => {
+    const fx = makeFixture();
+    fixtures.push(fx);
+    const { session } = fx.store.open(fx.artifact);
+    fx.store.queueFeedback(session.key, [
+      { kind: 'verdict', verdict: 'approve', text: 'looks great' }
+    ]);
+    const chat = fx.store.get(session.key).chat;
+    assert.strictEqual(chat.length, 1);
+    assert.strictEqual(chat[0].kind, 'verdict');
+    assert.strictEqual(chat[0].verdict, 'approve');
+    assert.strictEqual(chat[0].vtext, 'looks great');
+  })) passed++; else failed++;
+
   if (test('takeFeedback drains once, then returns waiting', () => {
     const fx = makeFixture();
     fixtures.push(fx);
