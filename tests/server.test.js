@@ -222,6 +222,15 @@ async function main() {
     }
   })) passed++; else failed++;
 
+  if (await test('change-highlighting protocol is wired into the served SDK and chrome client', async () => {
+    const sdk = await request(port, 'GET', '/sdk.js');
+    assert.ok(sdk.body.includes('pc:collect-blocks'), 'sdk.js should handle pc:collect-blocks');
+    assert.ok(sdk.body.includes('pc:set-baseline'), 'sdk.js should handle pc:set-baseline');
+    assert.ok(sdk.body.includes('pc-changed'), 'sdk.js should define the pc-changed highlight class');
+    const client = await request(port, 'GET', '/client.js');
+    assert.ok(client.body.includes('eddie:baseline:'), 'client.js should key the baseline snapshot in sessionStorage');
+  })) passed++; else failed++;
+
   if (await test('await with timeoutMs returns waiting when idle', async () => {
     const res = await request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}&timeoutMs=50`);
     assert.strictEqual(jsonBody(res).status, 'waiting');
