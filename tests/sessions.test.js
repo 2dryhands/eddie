@@ -77,6 +77,22 @@ function runTests() {
     assert.strictEqual(normalizeFeedbackItem({ kind: 'annotation', text: '', anchor: { selector: 'p' } }, 1), null);
   })) passed++; else failed++;
 
+  if (test('normalizeFeedbackItem accepts edit kind with before/after', () => {
+    const item = normalizeFeedbackItem({ kind: 'edit', text: '',
+      edit: { before: 'старый текст', after: 'новый текст' },
+      anchor: { selector: 'p', tag: 'text', snippet: 'старый текст' } }, 1);
+    assert.ok(item, 'edit item must be accepted');
+    assert.strictEqual(item.kind, 'edit');
+    assert.deepStrictEqual(item.edit, { before: 'старый текст', after: 'новый текст' });
+  })) passed++; else failed++;
+
+  if (test('edit kind rejected without a real change', () => {
+    assert.strictEqual(normalizeFeedbackItem({ kind: 'edit', edit: { before: 'x', after: 'x' },
+      anchor: { selector: 'p' } }, 2), null);
+    assert.strictEqual(normalizeFeedbackItem({ kind: 'edit', edit: { before: '', after: 'y' },
+      anchor: { selector: 'p' } }, 3), null);
+  })) passed++; else failed++;
+
   console.log('\nOpen / reopen semantics:');
 
   if (test('open creates a session keyed by canonical path', () => {
