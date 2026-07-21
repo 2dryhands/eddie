@@ -173,6 +173,8 @@ async function main() {
     assert.ok(res.body.includes('<span class="name">Eddie</span>'), 'brand name is Eddie');
     assert.ok(res.body.includes('pc-session'));
     assert.ok(res.body.includes('data-i18n="approve"'));
+    assert.ok(!res.body.includes('id="changes"'), 'request-changes button removed from chrome UI');
+    assert.ok(!res.body.includes('data-i18n="requestChanges"'), 'requestChanges i18n key no longer rendered');
     assert.ok(res.body.includes('sandbox="allow-scripts allow-forms allow-popups"'));
     assert.ok(res.body.includes('id="tasks"'));
     assert.ok(res.body.includes('data-i18n="tasksHeader"'));

@@ -4,8 +4,9 @@
 
 **Что это.** Eddie — локальный браузерный канвас для ревью планов и
 отчётов: агент открывает `.md`/`.html`-файл, человек комментирует, редактирует
-текст прямо в браузере и жмёт Approve / Request changes, а агент получает
-весь фидбек одним JSON-ответом на блокирующий CLI-вызов. Работает без
+текст прямо в браузере и жмёт «Отправить» (продолжить работу) или
+«Закоммитить» (принято), а агент получает весь фидбек одним JSON-ответом на
+блокирующий CLI-вызов. Работает без
 внешних зависимостей — только Node.js и локальный HTTP-сервер на
 `127.0.0.1`. Родился как отделившаяся и доработанная версия инструмента
 `plan-canvas`.
@@ -34,8 +35,7 @@ flowchart TD
   C --> D["JSON-фидбек: items + tasks"]
   D --> E["Агент: правит файл, --resolve каждый item"]
   E -->|"eddie await --reply ... --resolve ..."| B
-  B -->|"verdict: approve"| F["Агент: eddie end"]
-  B -->|"verdict: request-changes"| C
+  B -->|"Закоммитить (verdict: approve)"| F["Агент: eddie end"]
 ```
 
 ### Протокол — коротко
@@ -88,11 +88,11 @@ Eddie извлечён и доработан из инструмента `plan-c
 
 **What it is.** Eddie is a local browser canvas for reviewing plans and
 reports: an agent opens a `.md`/`.html` file, a human annotates it, edits
-text directly in the browser, and hits Approve / Request changes, while the
-agent gets the entire round of feedback as one JSON response from a single
-blocking CLI call. It has no external dependencies — just Node.js and a
-local HTTP server on `127.0.0.1`. It started as a spun-off, evolved version
-of the `plan-canvas` tool.
+text directly in the browser, and hits Send (keep the loop going) or Ship it
+(accepted), while the agent gets the entire round of feedback as one JSON
+response from a single blocking CLI call. It has no external dependencies —
+just Node.js and a local HTTP server on `127.0.0.1`. It started as a
+spun-off, evolved version of the `plan-canvas` tool.
 
 ### Quick start
 
@@ -118,8 +118,7 @@ flowchart TD
   C --> D["JSON feedback: items + tasks"]
   D --> E["Agent edits the file, --resolve each item"]
   E -->|"eddie await --reply ... --resolve ..."| B
-  B -->|"verdict: approve"| F["Agent: eddie end"]
-  B -->|"verdict: request-changes"| C
+  B -->|"Ship it (verdict: approve)"| F["Agent: eddie end"]
 ```
 
 ### Protocol, briefly

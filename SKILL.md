@@ -1,6 +1,6 @@
 ---
 name: eddie
-description: Open plans and Markdown/HTML artifacts in a local browser canvas where a human annotates elements, edits text inline, chats, and delivers an Approve / Request changes verdict — while the agent blocks on a single CLI call that returns their feedback as structured JSON. Use when presenting a plan or report for review, when feedback is easier pointed at than typed, or when the human wants to edit text directly and have the agent apply the exact change.
+description: Open plans and Markdown/HTML artifacts in a local browser canvas where a human annotates elements, edits text inline, chats, and clicks Send or Ship it to hand back feedback or accept the work — while the agent blocks on a single CLI call that returns their feedback as structured JSON. Use when presenting a plan or report for review, when feedback is easier pointed at than typed, or when the human wants to edit text directly and have the agent apply the exact change.
 metadata:
   origin: eddie
 version: "1.0.0"
@@ -10,9 +10,9 @@ version: "1.0.0"
 
 Review loop for plans and local artifacts: you write the artifact, the human
 reviews it in the browser — annotating the exact element they mean, editing
-text inline, chatting, and delivering an **Approve / Request changes**
-verdict — while you block on a single CLI call that returns their feedback
-as JSON.
+text inline, chatting, and clicking **Send** (keep the loop going) or
+**Ship it** (final acceptance) — while you block on a single CLI call that
+returns their feedback as JSON.
 
 Extracted and evolved from the `plan-canvas` tool in
 [everything-claude-code](https://github.com/affaan-m/everything-claude-code)
@@ -88,10 +88,14 @@ eddie await plan.md \
   reformat, or "improve" it beyond what they typed. The server never sends
   a no-op edit (identical before/after is rejected upstream), so every
   `edit` item is a real change to make.
-- `kind: "verdict"` — `approve` means the artifact is CONFIRMED: stop
-  polling, run `eddie end <file>`, and move on (start implementing, ship the
-  report, etc.). `request-changes` means keep revising and keep the loop
-  going. A verdict is never itself a task — it doesn't need `--resolve`.
+- `kind: "verdict"` — `approve` (the chrome's **Ship it** button) is final
+  acceptance: the artifact is CONFIRMED. Commit/push the accepted work per
+  your project's git rules, report back, and run `eddie end <file>` to close
+  the session — don't just stop polling and wait. `request-changes` is no
+  longer a chrome button (the canvas only ships Send / Ship it), but it
+  remains valid protocol input — other clients or older flows may still send
+  it — and simply means "revise and keep listening." A verdict is never
+  itself a task — it doesn't need `--resolve`.
 
 ## Tasks Lifecycle
 
