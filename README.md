@@ -1,5 +1,7 @@
 # Eddie
 
+![Eddie review canvas](docs/screenshot.png)
+
 ## Русский
 
 **Что это.** Eddie — локальный браузерный канвас для ревью планов и
