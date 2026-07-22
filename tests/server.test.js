@@ -178,6 +178,7 @@ async function main() {
     assert.ok(res.body.includes('sandbox="allow-scripts allow-forms allow-popups"'));
     assert.ok(res.body.includes('id="tasks"'));
     assert.ok(res.body.includes('data-i18n="tasksHeader"'));
+    assert.ok(res.body.includes('id="panelBtn"'), 'panel collapse toggle present in the header');
   })) passed++; else failed++;
 
   if (await test('markdown artifacts render in the Eddie plan template with the SDK', async () => {
@@ -251,6 +252,7 @@ async function main() {
     assert.ok(sdk.body.includes('pc:collect-blocks'), 'sdk.js should handle pc:collect-blocks');
     assert.ok(sdk.body.includes('pc:set-baseline'), 'sdk.js should handle pc:set-baseline');
     assert.ok(sdk.body.includes('pc-changed'), 'sdk.js should define the pc-changed highlight class');
+    assert.ok(sdk.body.includes('pc:toggle-panel'), 'sdk.js should forward Cmd/Ctrl+B as pc:toggle-panel');
     const client = await request(port, 'GET', '/client.js');
     assert.ok(client.body.includes('eddie:baseline:'), 'client.js should key the baseline snapshot in sessionStorage');
   })) passed++; else failed++;
