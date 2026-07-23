@@ -118,6 +118,7 @@ async function main() {
   const htmlArtifact = path.join(tmp, 'report.html');
   fs.writeFileSync(htmlArtifact, '<!DOCTYPE html><html><body><h1>Report</h1></body></html>');
   fs.writeFileSync(path.join(tmp, 'style.css'), 'body { color: red }');
+  fs.writeFileSync(path.join(tmp, 'clip.mp4'), 'fake-mp4-bytes');
   fs.writeFileSync(path.join(os.tmpdir(), 'eddie-outside.txt'), 'secret');
 
   const store = createSessionStore({ stateDir: path.join(tmp, 'state') });
@@ -238,6 +239,12 @@ async function main() {
     assert.ok(ok.body.includes('color: red'));
     const escape = await request(port, 'GET', `/artifact/${key}/..%2Feddie-outside.txt`);
     assert.strictEqual(escape.statusCode, 403);
+  })) passed++; else failed++;
+
+  if (await test('sibling video assets are served with a playable content-type', async () => {
+    const res = await request(port, 'GET', `/artifact/${key}/clip.mp4`);
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.headers['content-type'], 'video/mp4');
   })) passed++; else failed++;
 
   if (await test('static chrome assets are served', async () => {
