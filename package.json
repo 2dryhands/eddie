@@ -1,6 +1,6 @@
 {
   "name": "eddie-canvas",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Eddie - browser review canvas for agent-written plans and reports. Point, annotate, approve.",
   "license": "MIT",
   "bin": { "eddie": "./eddie.js" },
