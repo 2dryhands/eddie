@@ -211,6 +211,9 @@ async function main() {
     assert.ok(res.body.includes('id="blankOverlay"'), 'blank-iframe recovery overlay present in the frame');
     assert.ok(res.body.includes('id="blankReload"'), 'blank-iframe recovery reload button present');
     assert.ok(res.body.includes('data-i18n="blankTitle"'), 'recovery overlay uses i18n title');
+    assert.ok(res.body.includes('id="downloadBtn"'), 'live-edit download button present');
+    assert.ok(res.body.includes('id="saveStatus"'), 'live-edit save status present');
+    assert.ok(/"editable":\s*false/.test(res.body), 'markdown session is not editable in the bootstrap');
   })) passed++; else failed++;
 
   if (await test('markdown artifacts render in the Eddie plan template with the SDK', async () => {
@@ -262,6 +265,17 @@ async function main() {
     const res = await request(port, 'GET', `/artifact/${htmlKey}/`);
     assert.ok(res.body.includes('<h1>Report</h1>'));
     assert.ok(res.body.includes('<script src="/sdk.js"></script>\n</body>'));
+  })) passed++; else failed++;
+
+  if (await test('POST /save writes edited HTML back to disk; markdown refused; empty body rejected', async () => {
+    const edited = '<!DOCTYPE html><html><body><h1>Edited in canvas</h1><p>live edit saved</p></body></html>';
+    const save = await request(port, 'POST', `/api/session/${htmlKey}/save`, { body: { html: edited } });
+    assert.strictEqual(save.statusCode, 200, 'save returns 200');
+    assert.strictEqual(fs.readFileSync(htmlArtifact, 'utf8'), edited, 'file on disk reflects the edit');
+    const md = await request(port, 'POST', `/api/session/${key}/save`, { body: { html: '<h1>x</h1>' } });
+    assert.strictEqual(md.statusCode, 409, 'markdown artifact save is refused (not round-trippable)');
+    const bad = await request(port, 'POST', `/api/session/${htmlKey}/save`, { body: {} });
+    assert.strictEqual(bad.statusCode, 400, 'missing html is rejected');
   })) passed++; else failed++;
 
   if (await test('sibling assets are served, traversal is blocked', async () => {
@@ -325,6 +339,19 @@ async function main() {
     assert.ok(client.body.includes("createElement('iframe')"), 'reloadArtifact must recreate the iframe element (Safari wedges a src-swapped sandboxed frame blank)');
     assert.ok(client.body.includes('replaceWith'), 'reload must swap in the fresh iframe node');
     assert.ok(client.body.includes('requestReload'), 'reload triggers must be coalesced to avoid src churn wedging the frame');
+  })) passed++; else failed++;
+
+  if (await test('live-edit wiring present in client.js and sdk.js', async () => {
+    const client = await request(port, 'GET', '/client.js');
+    assert.ok(client.body.includes("'pc:set-editable'"), 'chrome must tell the iframe when it is editable');
+    assert.ok(client.body.includes('scheduleSave'), 'chrome must debounce edits into a save');
+    assert.ok(client.body.includes("/save'") || client.body.includes("/save',") || client.body.includes("+ '/save'"), 'chrome must POST edits to the /save endpoint');
+    assert.ok(client.body.includes('downloadClean'), 'chrome must offer a clean download');
+    const sdk = await request(port, 'GET', '/sdk.js');
+    assert.ok(sdk.body.includes('enableEditing'), 'sdk must make blocks editable');
+    assert.ok(sdk.body.includes("'pc:save'"), 'sdk must post edits back to the chrome');
+    assert.ok(sdk.body.includes('cleanHtml'), 'sdk must serialise a clean copy (Eddie markup stripped)');
+    assert.ok(sdk.body.includes("removeAttribute('contenteditable')"), 'clean copy must drop the editing attributes');
   })) passed++; else failed++;
 
   if (await test('client.js rejects iframe-sourced verdict items (anti-spoofing guard)', async () => {
