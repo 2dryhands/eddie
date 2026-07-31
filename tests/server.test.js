@@ -14,7 +14,7 @@ const os = require('os');
 const path = require('path');
 
 const { createSessionStore } = require('../lib/sessions');
-const { createPlanCanvasServer } = require('../lib/server');
+const { createPlanCanvasServer, parseByteRange } = require('../lib/server');
 
 async function test(name, fn) {
   try {
@@ -111,6 +111,34 @@ async function main() {
 
   let passed = 0;
   let failed = 0;
+
+  // Golden-set for the Range parser: known headers → known byte windows.
+  // The suffix form `bytes=-N` (last N bytes) is the one Safari uses to read a
+  // trailing MP4 moov atom; a regression here silently breaks media playback.
+  if (await test('parseByteRange golden-set: offset, open, and suffix ranges (size=10000)', async () => {
+    const S = 10000;
+    const cases = [
+      ['bytes=0-',       { start: 0,    end: 9999 }], // whole file via open range
+      ['bytes=0-499',    { start: 0,    end: 499  }], // first 500
+      ['bytes=500-999',  { start: 500,  end: 999  }], // middle window
+      ['bytes=500-',     { start: 500,  end: 9999 }], // offset to end
+      ['bytes=9500-',    { start: 9500, end: 9999 }], // tail via open range
+      ['bytes=-500',     { start: 9500, end: 9999 }], // suffix: LAST 500 bytes
+      ['bytes=-6000',    { start: 4000, end: 9999 }], // suffix: LAST 6000 bytes
+      ['bytes=-20000',   { start: 0,    end: 9999 }], // suffix larger than file → whole
+      ['bytes=-0',       { unsatisfiable: true }],    // zero-length suffix
+      ['bytes=10000-',   { unsatisfiable: true }],    // start past EOF
+      ['bytes=-',        null],                        // malformed → serve whole (200)
+      ['',               null],                        // no Range → serve whole (200)
+    ];
+    for (const [header, expected] of cases) {
+      assert.deepStrictEqual(parseByteRange(header, S), expected, `Range "${header}"`);
+    }
+    // end clamps to the last byte even when the client over-asks
+    assert.deepStrictEqual(parseByteRange('bytes=0-99999', S), { start: 0, end: 9999 });
+    // a zero-size resource is never satisfiable via ranges
+    assert.strictEqual(parseByteRange('bytes=0-10', 0), null);
+  })) passed++; else failed++;
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'eddie-server-'));
   const artifact = path.join(tmp, 'demo.plan.md');
@@ -248,6 +276,30 @@ async function main() {
     const res = await request(port, 'GET', `/artifact/${key}/clip.mp4`);
     assert.strictEqual(res.statusCode, 200);
     assert.strictEqual(res.headers['content-type'], 'video/mp4');
+    assert.strictEqual(res.headers['accept-ranges'], 'bytes', 'full responses advertise range support');
+  })) passed++; else failed++;
+
+  // clip.mp4 body is the 14-byte string 'fake-mp4-bytes' (indices 0..13).
+  if (await test('sibling media honours byte ranges: offset, open, and suffix all stream the right bytes', async () => {
+    const head = await request(port, 'GET', `/artifact/${key}/clip.mp4`, { headers: { range: 'bytes=0-3' } });
+    assert.strictEqual(head.statusCode, 206, 'a byte range yields 206 Partial Content');
+    assert.strictEqual(head.headers['content-range'], 'bytes 0-3/14');
+    assert.strictEqual(head.headers['content-length'], '4');
+    assert.strictEqual(head.body, 'fake');
+
+    const suffix = await request(port, 'GET', `/artifact/${key}/clip.mp4`, { headers: { range: 'bytes=-4' } });
+    assert.strictEqual(suffix.statusCode, 206, 'suffix range (last N bytes) must not 416');
+    assert.strictEqual(suffix.headers['content-range'], 'bytes 10-13/14');
+    assert.strictEqual(suffix.body, 'ytes', 'suffix range returns the LAST 4 bytes, not a middle window');
+
+    const open = await request(port, 'GET', `/artifact/${key}/clip.mp4`, { headers: { range: 'bytes=5-' } });
+    assert.strictEqual(open.statusCode, 206);
+    assert.strictEqual(open.headers['content-range'], 'bytes 5-13/14');
+    assert.strictEqual(open.body, 'mp4-bytes');
+
+    const bad = await request(port, 'GET', `/artifact/${key}/clip.mp4`, { headers: { range: 'bytes=99-200' } });
+    assert.strictEqual(bad.statusCode, 416, 'a range starting past EOF is unsatisfiable');
+    assert.strictEqual(bad.headers['content-range'], 'bytes */14');
   })) passed++; else failed++;
 
   if (await test('static chrome assets are served', async () => {
