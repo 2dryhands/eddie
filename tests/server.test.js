@@ -180,6 +180,9 @@ async function main() {
     assert.ok(res.body.includes('id="tasks"'));
     assert.ok(res.body.includes('data-i18n="tasksHeader"'));
     assert.ok(res.body.includes('id="panelBtn"'), 'panel collapse toggle present in the header');
+    assert.ok(res.body.includes('id="blankOverlay"'), 'blank-iframe recovery overlay present in the frame');
+    assert.ok(res.body.includes('id="blankReload"'), 'blank-iframe recovery reload button present');
+    assert.ok(res.body.includes('data-i18n="blankTitle"'), 'recovery overlay uses i18n title');
   })) passed++; else failed++;
 
   if (await test('markdown artifacts render in the Eddie plan template with the SDK', async () => {
@@ -262,6 +265,14 @@ async function main() {
     assert.ok(sdk.body.includes('pc:toggle-panel'), 'sdk.js should forward Cmd/Ctrl+B as pc:toggle-panel');
     const client = await request(port, 'GET', '/client.js');
     assert.ok(client.body.includes('eddie:baseline:'), 'client.js should key the baseline snapshot in sessionStorage');
+  })) passed++; else failed++;
+
+  if (await test('client.js blank-iframe recovery: visible overlay, fresh-iframe reload, coalesced reloads', async () => {
+    const client = await request(port, 'GET', '/client.js');
+    assert.ok(client.body.includes('showBlankOverlay'), 'watchdog give-up must surface a visible recovery overlay, not just a console warning');
+    assert.ok(client.body.includes("createElement('iframe')"), 'reloadArtifact must recreate the iframe element (Safari wedges a src-swapped sandboxed frame blank)');
+    assert.ok(client.body.includes('replaceWith'), 'reload must swap in the fresh iframe node');
+    assert.ok(client.body.includes('requestReload'), 'reload triggers must be coalesced to avoid src churn wedging the frame');
   })) passed++; else failed++;
 
   if (await test('client.js rejects iframe-sourced verdict items (anti-spoofing guard)', async () => {
