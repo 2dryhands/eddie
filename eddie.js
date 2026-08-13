@@ -150,8 +150,26 @@ async function ensureServer({ stateDir, port }) {
   throw new Error(`eddie server did not become healthy on port ${port}; check ${path.join(stateDir, 'server.log')}`);
 }
 
+// macOS-only: Chrome's Blink parses a heavy sandboxed iframe (data-URI
+// fonts/images, dozens of charts) far faster than Safari's WebKit, which can
+// stall many seconds on the same artifact or wedge the iframe permanently
+// blank — see the readiness-watchdog comments in lib/ui.js and fix commits
+// b6825ca/be8653c/cb878c9, three rounds of patching the *symptom* on the
+// canvas side. Routing around WebKit for the initial launch fixes the cause
+// instead: skip it whenever Chrome is actually installed, otherwise fall
+// through to the system default untouched.
+const CHROME_APP_PATH = '/Applications/Google Chrome.app';
+
 function openBrowser(url) {
   const platform = process.platform;
+  if (platform === 'darwin' && fs.existsSync(CHROME_APP_PATH)) {
+    try {
+      spawn('open', ['-a', 'Google Chrome', url], { detached: true, stdio: 'ignore' }).unref();
+      return true;
+    } catch {
+      // fall through to the system default below
+    }
+  }
   const [cmd, args] =
     platform === 'darwin' ? ['open', [url]]
       : platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
