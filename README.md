@@ -1,5 +1,7 @@
 # Eddie
 
+![License](https://img.shields.io/badge/license-MIT-green) ![Node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen) ![npm package](https://img.shields.io/badge/run%20with-npx-blue)
+
 ![Eddie review canvas](docs/screenshot.png)
 
 ## Русский
@@ -16,13 +18,12 @@
 ### Быстрый старт
 
 ```bash
-# Клонировать и запустить напрямую
-git clone https://github.com/2dryhands/eddie.git
-cd eddie
-node eddie.js open plan.md
-
-# Когда репозиторий станет публичным — без клонирования
+# Запустить без установки (Node.js ≥ 18)
 npx github:2dryhands/eddie open plan.md
+
+# Или поставить глобально и звать короткой командой
+npm install -g github:2dryhands/eddie
+eddie open plan.md
 ```
 
 `open` возвращается сразу же и открывает файл в браузере. Дальше агент
@@ -99,13 +100,12 @@ spun-off, evolved version of the `plan-canvas` tool.
 ### Quick start
 
 ```bash
-# Clone and run directly
-git clone https://github.com/2dryhands/eddie.git
-cd eddie
-node eddie.js open plan.md
-
-# Once the repo is public — no clone needed
+# Run without installing (Node.js ≥ 18)
 npx github:2dryhands/eddie open plan.md
+
+# Or install globally for a short alias
+npm install -g github:2dryhands/eddie
+eddie open plan.md
 ```
 
 `open` returns immediately and opens the file in the browser. The agent then
