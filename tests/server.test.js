@@ -316,6 +316,93 @@ async function main() {
     assert.strictEqual(bad.headers['content-range'], 'bytes */14');
   })) passed++; else failed++;
 
+  // --- white-screen regression gate (round 4: systemic fix) -----------------
+  // The reviewer-facing bug: heavy artifacts painted a bare WHITE frame for
+  // seconds (or forever, when the engine wedged the sandboxed iframe) because
+  // the iframe background was #fff and nothing signalled "still loading".
+  // Gate 1: the canvas never paints white — iframe bg follows the theme.
+  if (await test('canvas.css paints the frame with the theme surface, never bare white', async () => {
+    const res = await request(port, 'GET', '/canvas.css');
+    assert.strictEqual(res.statusCode, 200);
+    assert.ok(
+      !res.body.includes('.frame iframe{width:100%;height:100%;border:0;background:#fff}'),
+      'iframe must not hardcode #fff (the white screen itself)'
+    );
+    assert.ok(
+      res.body.includes('.frame iframe{width:100%;height:100%;border:0;background:var(--bg2)}'),
+      'iframe background must follow the canvas surface color'
+    );
+    assert.ok(res.body.includes('#veilMeta'), 'loading veil meta (size / elapsed) styled');
+    assert.ok(res.body.includes('.veil.show'), 'veil visibility state styled');
+  })) passed++; else failed++;
+
+  // Gate 2: the chrome ships a visible loading veil until the artifact signals ready.
+  if (await test('canvas chrome shows a loading veil until pc:ready (no silent white)', async () => {
+    const res = await request(port, 'GET', `/canvas/${key}`);
+    assert.strictEqual(res.statusCode, 200);
+    assert.ok(res.body.includes('id="loadVeil"'), 'veil element present in the frame');
+    assert.ok(/id="loadVeil"[^>]*class="[^"]*\bshow\b/.test(res.body), 'veil starts visible (covers the parse window)');
+    assert.ok(res.body.includes('data-i18n="veilLoading"'), 'veil label is localized');
+    const client = await request(port, 'GET', '/client.js');
+    assert.ok(client.body.includes('function showVeil'), 'client can raise the veil');
+    assert.ok(client.body.includes('function hideVeil'), 'client can drop the veil');
+    assert.ok(
+      /msg\.type === 'pc:ready'[\s\S]{0,500}?hideVeil\(\)/.test(client.body),
+      'a ready signal from the artifact drops the veil'
+    );
+    assert.ok(
+      /function reloadArtifact[\s\S]{0,300}?showVeil\(\)/.test(client.body),
+      'every reload raises the veil again while the fresh iframe parses'
+    );
+    assert.ok(client.body.includes('drawVeilMeta'), 'veil meta renderer present');
+    assert.ok(client.body.includes("secs >= 3"), 'veil shows a still-loading elapsed counter after 3 s');
+  })) passed++; else failed++;
+
+  // Gate 3: self-heal reloads revalidate instead of re-downloading megabytes.
+  if (await test('artifact document supports ETag revalidation (304 on unchanged)', async () => {
+    const first = await request(port, 'GET', `/artifact/${htmlKey}/`);
+    assert.strictEqual(first.statusCode, 200);
+    const etag = first.headers.etag;
+    assert.ok(etag, 'first response carries an ETag');
+    assert.strictEqual(first.headers['cache-control'], 'no-cache', 'stored-but-revalidated, not no-store');
+    const again = await request(port, 'GET', `/artifact/${htmlKey}/`, { headers: { 'if-none-match': etag } });
+    assert.strictEqual(again.statusCode, 304, 'unchanged artifact revalidates to 304');
+    assert.strictEqual(again.body, '', '304 carries no body');
+    // A real content change must produce a new ETag and a full 200.
+    fs.appendFileSync(htmlArtifact, '<p>appended</p>');
+    const changed = await request(port, 'GET', `/artifact/${htmlKey}/`, { headers: { 'if-none-match': etag } });
+    assert.strictEqual(changed.statusCode, 200, 'changed artifact is served in full');
+    assert.notStrictEqual(changed.headers.etag, etag, 'new content, new ETag');
+    assert.ok(changed.body.includes('<p>appended</p>'));
+  })) passed++; else failed++;
+
+  // Gate 4: next time a browser whites out, the server log holds the trace
+  // (per convention: every recurring complaint leaves an instrument behind).
+  if (await test('artifact document GETs leave a timed access line in the server log', async () => {
+    const lines = [];
+    const logStore = createSessionStore({ stateDir: path.join(tmp, 'state-log') });
+    const logged = createPlanCanvasServer({
+      store: logStore,
+      version: '9.9.9-test',
+      idleTimeoutMs: 0,
+      log: l => lines.push(l)
+    });
+    const { port: logPort } = await logged.listen(0);
+    try {
+      const opened = jsonBody(await request(logPort, 'POST', '/api/sessions', { body: { file: htmlArtifact } }));
+      await request(logPort, 'GET', `/artifact/${opened.key}/`);
+      assert.ok(
+        lines.some(l => l.includes('/artifact/') && l.includes(opened.key)),
+        `expected an artifact access line, got: ${JSON.stringify(lines)}`
+      );
+      const hit = lines.find(l => l.includes(`/artifact/${opened.key}`));
+      assert.ok(/\d+(\.\d+)?ms/.test(hit), 'access line includes duration');
+      assert.ok(/\d+(\.\d+)?(KB|MB|B)\b/i.test(hit), 'access line includes payload size');
+    } finally {
+      await logged.close().catch(() => {});
+    }
+  })) passed++; else failed++;
+
   if (await test('static chrome assets are served', async () => {
     for (const asset of ['/canvas.css', '/client.js', '/sdk.js']) {
       const res = await request(port, 'GET', asset);
