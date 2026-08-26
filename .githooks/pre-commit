@@ -47,3 +47,10 @@ fi
 
 echo "${GRN}✓ pre-commit: секретов не видно (grep-фолбэк; для строгости — gitleaks)${NC}"
 exit 0
+
+# --- verify-гейт (добавлен sync-verify.sh) ---
+_ROOT=$(git rev-parse --show-toplevel)
+if [[ -f "$_ROOT/verify.py" ]]; then
+  echo "pre-commit: verify.py (staged)…"
+  (cd "$_ROOT" && python3 verify.py --staged) || { echo "✖ pre-commit: verify красный — коммит остановлен (обойти: --no-verify)"; exit 1; }
+fi
