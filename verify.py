@@ -21,7 +21,9 @@ Pre-commit хук гоняет quick; перед «готово» и перед 
 Делегирование: есть scripts/check.sh → --full гоняет его вместо S/T/N;
                есть scripts/quick-test.sh → quick гоняет его вместо S.
 Опт-аут для скрипта, чей selftest требует сети/ключей: строка `# verify: skip` в файле.
-Python: берётся .venv/bin/python, если есть, иначе тот, которым запущен verify.py.
+Тяжёлый selftest (полный экспорт и т.п.): `# verify: timeout=900` в файле — свой потолок.
+Python: берётся .venv/bin/python, если есть, иначе тот, которым запущен verify.py;
+компиляция и selftest'ы идут им же (не тем, чем запущен verify.py).
 Исключённые папки: .git .venv venv node_modules data shared _archive .worktrees __pycache__
 
 Канонический экземпляр — sdlc-starter-kit/_template/verify.py; в проекты раскатывается
@@ -87,12 +89,25 @@ def changed_files(root: Path, staged: bool = False) -> set[str] | None:
     return out
 
 
+SELFTEST_FLAG = re.compile(r"""["']--selftest["']""")       # флаг как токен в коде, не упоминание в тексте
+TIMEOUT_MARK = re.compile(r"#\s*verify:\s*timeout=(\d+)")
+
+
 def has_selftest(path: Path) -> bool:
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return False
-    return "--selftest" in text and "# verify: skip" not in text
+    return bool(SELFTEST_FLAG.search(text)) and "# verify: skip" not in text
+
+
+def file_timeout(path: Path) -> int:
+    """`# verify: timeout=900` в файле — свой потолок для тяжёлого selftest'а."""
+    try:
+        m = TIMEOUT_MARK.search(path.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        m = None
+    return int(m.group(1)) if m else TIMEOUT
 
 
 def selftest_cmd(root: Path, path: Path, py: str) -> list[str]:
@@ -118,8 +133,9 @@ def module_available(py: str, mod: str) -> bool:
 # ───────────────────────── проверки ─────────────────────────
 
 class Check:
-    def __init__(self, code: str, name: str, cmd=None, fn=None):
+    def __init__(self, code: str, name: str, cmd=None, fn=None, timeout: int | None = None):
         self.code, self.name, self.cmd, self.fn = code, name, cmd, fn
+        self.timeout = timeout
 
 
 def hygiene_checks(root: Path) -> list[Check]:
@@ -148,14 +164,18 @@ def plan(root: Path, full: bool, staged: bool = False) -> list[Check]:
 
     if py_files:
         def compile_all(files=py_files):
-            bad = []
-            for p in files:
-                try:
-                    compile(p.read_bytes(), str(p), "exec")  # без записи байткода — иначе мусорит __pycache__
-                except (SyntaxError, ValueError) as e:
-                    bad.append(f"{p.relative_to(root)}:{getattr(e, 'lineno', '?')} {e.msg if hasattr(e, 'msg') else e}")
-                except OSError as e:
-                    bad.append(f"{p.relative_to(root)}: {e}")
+            # Компилируем интерпретатором ПРОЕКТА (.venv может быть 3.14, системный — 3.9:
+            # f-string с бэкслэшем валиден в одном и SyntaxError в другом). Без байткода.
+            src = ("import sys, ast\nbad = []\nfor f in sys.stdin.read().split('\\0'):\n"
+                   "    if not f: continue\n"
+                   "    try: ast.parse(open(f, 'rb').read(), f)\n"
+                   "    except SyntaxError as e: bad.append(f'{f}:{e.lineno} {e.msg}')\n"
+                   "    except OSError as e: bad.append(f'{f}: {e}')\n"
+                   "print('\\n'.join(bad))\n")
+            r = subprocess.run([py, "-c", src], input="\0".join(str(p) for p in files),
+                               capture_output=True, text=True, timeout=TIMEOUT)
+            assert r.returncode == 0, "компилятор упал: " + r.stderr.strip()[-300:]
+            bad = [l.replace(str(root) + "/", "") for l in r.stdout.splitlines() if l.strip()]
             assert not bad, f"не компилируется {len(bad)}: " + "; ".join(bad[:3])
         checks.append(Check("C", f"компиляция {len(py_files)} .py", fn=compile_all))
 
@@ -165,7 +185,8 @@ def plan(root: Path, full: bool, staged: bool = False) -> list[Check]:
     else:
         for p in py_files:
             if has_selftest(p):
-                checks.append(Check("S", f"{p.relative_to(root)} --selftest", cmd=selftest_cmd(root, p, py)))
+                checks.append(Check("S", f"{p.relative_to(root)} --selftest", cmd=selftest_cmd(root, p, py),
+                                    timeout=file_timeout(p)))
         if full:
             dirs = test_dirs(root)
             if dirs:
@@ -200,11 +221,13 @@ def run_check(root: Path, c: Check) -> tuple[bool, float, str]:
         except Exception as e:  # noqa: BLE001 — любое падение = красный
             return False, time.time() - t0, str(e)
     env = {**os.environ, "VERIFY": "1", "PYTHONDONTWRITEBYTECODE": "1"}
+    limit = c.timeout or TIMEOUT
     try:
         r = subprocess.run(c.cmd, cwd=str(root), capture_output=True, text=True,
-                           timeout=TIMEOUT, env=env)
+                           timeout=limit, env=env)
     except subprocess.TimeoutExpired:
-        return False, time.time() - t0, f"таймаут {TIMEOUT} с (VERIFY_TIMEOUT), или пометь `# verify: skip`"
+        return False, time.time() - t0, (f"таймаут {limit} с — подними VERIFY_TIMEOUT, поставь в файле "
+                                         "`# verify: timeout=N` или `# verify: skip`")
     except OSError as e:
         return False, time.time() - t0, str(e)
     out = (r.stdout + r.stderr).strip().splitlines()
@@ -321,6 +344,18 @@ def selftest() -> int:
     if any("bad.py" in n for n in ran10):
         probs.append("--staged запустил незастейдженный bad.py")
     cases.append(("10. --staged: чужая красная правка вне индекса не роняет коммит", probs, ran10))
+    # 11. упоминание «--selftest» в тексте/строке — не режим, скрипт не запускается
+    ran11 = case("11. упоминание --selftest в строке без флага → не selftest-скрипт",
+                 make_repo({"scripts/doc.py": 'ROWS = [("x", "🧪 other --selftest · golden")]\n'
+                                              "import sys\nsys.exit(1)\n"}), True, True)
+    if any("doc.py" in n for n in ran11):
+        cases[-1][1].append("doc.py принят за selftest-скрипт")
+    # 12. `# verify: timeout=N` в файле перебивает общий потолок
+    saved, TIMEOUT = TIMEOUT, 1
+    case("12. `# verify: timeout=20` держит медленный selftest при VERIFY_TIMEOUT=1 → PASS",
+         make_repo({"scripts/slow.py": "# verify: timeout=20\n" +
+                    "import sys, time\nif '--selftest' in sys.argv:\n    time.sleep(2)\n"}), True, True)
+    TIMEOUT = saved
 
     print(f"Selftest verify.py ({len(cases)} сценариев):")
     failures = 0
