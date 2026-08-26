@@ -1,56 +1,68 @@
 #!/usr/bin/env bash
-# pre-commit — красный гейт на секреты (sdlc-starter-kit).
-# Активируется через: git config core.hooksPath .githooks (делают init/apply-скрипты).
-# Если стоит gitleaks — используем его. Нет — grep-фолбэк по паттернам ключей.
-# Ложное срабатывание? Осознанно пропустить: git commit --no-verify
+# pre-commit — два красных гейта (sdlc-starter-kit):
+#   1) секреты в staged-изменениях (gitleaks, если стоит; иначе grep по паттернам ключей)
+#   2) verify.py --staged — гигиена, компиляция, selftest'ы изменённых скриптов, smoke.py
+# Активируется через: git config core.hooksPath .githooks (делают init/apply/sync-скрипты).
+# Ложное срабатывание? Осознанно пропустить: git commit --no-verify (и сказать, почему).
 set -euo pipefail
 
 RED=$'\033[31m'; YEL=$'\033[33m'; GRN=$'\033[32m'; NC=$'\033[0m'
 
-# 1) Имена файлов, которых в коммите быть не должно (на случай force-add в обход .gitignore)
-BAD_NAMES=$(git diff --cached --name-only --diff-filter=ACM \
-  | grep -iE '(^|/)\.env($|\.)|\.session$|id_rsa|service.*account.*\.json$|\.p12$|secrets\.|\.pem$' \
-  | grep -viE '\.example($|\.)' || true)
-if [[ -n "$BAD_NAMES" ]]; then
-  echo "${RED}✖ pre-commit: в коммит попали файлы, похожие на секреты:${NC}"
-  echo "$BAD_NAMES" | sed 's/^/    /'
-  echo "  Убери из индекса (git restore --staged <файл>) или, если точно можно, --no-verify."
-  exit 1
-fi
-
-# 2) Содержимое — сначала gitleaks, если есть
-if command -v gitleaks >/dev/null 2>&1; then
-  if ! gitleaks protect --staged --redact --no-banner 2>/dev/null; then
-    echo "${RED}✖ pre-commit: gitleaks нашёл секрет в staged-изменениях. Коммит остановлен.${NC}"
-    echo "  Разбери находку выше. Ложное? git commit --no-verify"
-    exit 1
+secret_gate() {
+  # 1) Имена файлов, которых в коммите быть не должно (на случай force-add в обход .gitignore)
+  local BAD_NAMES
+  BAD_NAMES=$(git diff --cached --name-only --diff-filter=ACM \
+    | grep -iE '(^|/)\.env($|\.(?!example))|\.env\.[^.]*$|\.session$|id_rsa|service.*account.*\.json$|\.p12$|secrets\.|\.pem$' \
+    | grep -viE '\.example($|\.)' || true)
+  if [[ -n "$BAD_NAMES" ]]; then
+    echo "${RED}✖ pre-commit: в коммит попали файлы, похожие на секреты:${NC}"
+    echo "$BAD_NAMES" | sed 's/^/    /'
+    echo "  Убери из индекса (git restore --staged <файл>) или, если точно можно, --no-verify."
+    return 1
   fi
-  echo "${GRN}✓ pre-commit: gitleaks чисто${NC}"
-  exit 0
-fi
 
-# 3) Фолбэк без gitleaks — grep добавленных строк по high-signal паттернам
-ADDED=$(git diff --cached --no-color -U0 -- . | grep '^+' | grep -v '^+++' || true)
-PATTERNS='ghp_[0-9A-Za-z]{36}|gh[osru]_[0-9A-Za-z]{36}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[0-9A-Za-z-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|[0-9]{8,10}:AA[0-9A-Za-z_-]{33}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
-HITS=$(echo "$ADDED" | grep -nE "$PATTERNS" || true)
-# generic key=value с длинным значением (частые FP — поэтому отдельно и мягче)
-GENERIC=$(echo "$ADDED" | grep -niE '(api[_-]?key|secret|token|password|passwd|access[_-]?key)["'"'"' ]*[:=]["'"'"' ]*[A-Za-z0-9_/+-]{16,}' || true)
+  # 2) Содержимое — сначала gitleaks, если есть
+  if command -v gitleaks >/dev/null 2>&1; then
+    if ! gitleaks protect --staged --redact --no-banner 2>/dev/null; then
+      echo "${RED}✖ pre-commit: gitleaks нашёл секрет в staged-изменениях. Коммит остановлен.${NC}"
+      echo "  Разбери находку выше. Ложное? git commit --no-verify"
+      return 1
+    fi
+    echo "${GRN}✓ pre-commit: gitleaks чисто${NC}"
+    return 0
+  fi
 
-if [[ -n "$HITS" || -n "$GENERIC" ]]; then
-  echo "${RED}✖ pre-commit: похоже на секрет в staged-изменениях:${NC}"
-  [[ -n "$HITS" ]] && echo "$HITS" | sed -E 's/(.{12}).*/\1…<redacted>/' | sed 's/^/    /'
-  [[ -n "$GENERIC" ]] && echo "$GENERIC" | sed -E 's/([:=]).*/\1 …<redacted>/' | sed 's/^/    /'
-  echo "  Ложное? Проверь глазами и: git commit --no-verify"
-  echo "  ${YEL}Совет: brew install gitleaks — точнее, меньше ложных.${NC}"
-  exit 1
-fi
+  # 3) Фолбэк без gitleaks — grep добавленных строк по high-signal паттернам
+  local ADDED PATTERNS HITS GENERIC
+  ADDED=$(git diff --cached --no-color -U0 -- . | grep '^+' | grep -v '^+++' || true)
+  PATTERNS='ghp_[0-9A-Za-z]{36}|gh[osru]_[0-9A-Za-z]{36}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[0-9A-Za-z-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|[0-9]{8,10}:AA[0-9A-Za-z_-]{33}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  HITS=$(echo "$ADDED" | grep -nE "$PATTERNS" || true)
+  # generic key=value с длинным значением (частые FP — поэтому отдельно и мягче)
+  GENERIC=$(echo "$ADDED" | grep -niE '(api[_-]?key|secret|token|password|passwd|access[_-]?key)["'"'"' ]*[:=]["'"'"' ]*[A-Za-z0-9_/+-]{16,}' || true)
 
-echo "${GRN}✓ pre-commit: секретов не видно (grep-фолбэк; для строгости — gitleaks)${NC}"
-exit 0
+  if [[ -n "$HITS" || -n "$GENERIC" ]]; then
+    echo "${RED}✖ pre-commit: похоже на секрет в staged-изменениях:${NC}"
+    [[ -n "$HITS" ]] && echo "$HITS" | sed -E 's/(.{12}).*/\1…<redacted>/' | sed 's/^/    /'
+    [[ -n "$GENERIC" ]] && echo "$GENERIC" | sed -E 's/([:=]).*/\1 …<redacted>/' | sed 's/^/    /'
+    echo "  Ложное? Проверь глазами и: git commit --no-verify"
+    echo "  ${YEL}Совет: brew install gitleaks — точнее, меньше ложных.${NC}"
+    return 1
+  fi
+  echo "${GRN}✓ pre-commit: секретов не видно (grep-фолбэк; для строгости — gitleaks)${NC}"
+}
 
-# --- verify-гейт (добавлен sync-verify.sh) ---
-_ROOT=$(git rev-parse --show-toplevel)
-if [[ -f "$_ROOT/verify.py" ]]; then
+verify_gate() {
+  local ROOT
+  ROOT=$(git rev-parse --show-toplevel)
+  [[ -f "$ROOT/verify.py" ]] || return 0
   echo "pre-commit: verify.py (staged)…"
-  (cd "$_ROOT" && python3 verify.py --staged) || { echo "✖ pre-commit: verify красный — коммит остановлен (обойти: --no-verify)"; exit 1; }
-fi
+  if ! (cd "$ROOT" && python3 verify.py --staged); then
+    echo "${RED}✖ pre-commit: verify красный — коммит остановлен.${NC}"
+    echo "  Чини и коммить снова. Осознанно обойти: git commit --no-verify (и объясни в сообщении коммита)."
+    return 1
+  fi
+}
+
+secret_gate
+verify_gate
+exit 0
