@@ -2,19 +2,24 @@
  * Socket-budget tests: Eddie in a real Chrome, driven over CDP.
  *
  * The bug these guard against (2026-08-26): every open canvas tab held its
- * event-stream socket open for the life of the tab. Chrome allows six sockets
- * per origin over HTTP/1.1, so six canvases left open — the normal way a
- * dashboard lives here — starved the origin: the next canvas queued behind
- * them and never loaded at all. Its renderer wedged so hard it stopped
- * answering CDP. Safari has its own pool, so pasting the same URL there
- * always worked, which hid the cause through four rounds of white-screen
- * patches on the canvas side.
+ * event-stream socket open for the life of the tab. A browser shares ~6
+ * sockets per origin across all of its tabs, so six canvases left open — the
+ * normal way a dashboard lives here — starved the origin: the next canvas
+ * queued behind them and never loaded at all, its renderer wedged so hard it
+ * stopped answering the debugger. Safari has its own pool, so pasting the same
+ * URL there always worked, which hid the cause through four rounds of
+ * white-screen patches on the canvas side.
+ *
+ * Two mechanisms keep it dead, and both are gated here:
+ *   parking  — a hidden canvas hands its stream back and reconnects on return
+ *   ration   — at most MAX_STREAMS live streams; the canvas looked at longest
+ *              ago yields its feed, says so, and takes it back on a click
  *
  * Gates:
- *   A  a fresh canvas still loads with six canvases already open
- *   B  a hidden canvas holds no event-stream socket
- *   C  returning to a parked canvas reconnects, and reloads the artifact
- *      only when the file actually changed
+ *   A  a fresh canvas always loads, however many canvases are already open
+ *   B  a hidden canvas holds no event-stream socket, and reclaims it on return
+ *   C  returning to a parked canvas reloads the artifact only if it changed
+ *   D  live streams never exceed the ration, and a yielded canvas says so
  *
  * No browser automation dependency: Chrome is driven over the DevTools
  * protocol through Node's built-in WebSocket. Skips cleanly without Chrome.
@@ -32,7 +37,7 @@ const { createSessionStore } = require('../lib/sessions');
 const { createPlanCanvasServer } = require('../lib/server');
 
 const CHROME = process.env.EDDIE_TEST_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const VISIBLE_TABS = 6;   // Chrome's per-origin socket budget over HTTP/1.1
+const MAX_STREAMS = 4;          // the ration under test
 const LOAD_DEADLINE_MS = 8000;
 
 const results = [];
@@ -145,14 +150,20 @@ function canvasLoaded(cdp, sessionId, key) {
 // and the contract under test is "the page reacts to visibilitychange".
 async function setHidden(cdp, sessionId, hidden) {
   const state = hidden ? 'hidden' : 'visible';
-  const ok = await evaluate(cdp, sessionId, `(() => {
+  const got = await evaluate(cdp, sessionId, `(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => ${hidden} });
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => '${state}' });
     document.dispatchEvent(new Event('visibilitychange'));
     return document.visibilityState;
   })()`);
-  assert.strictEqual(ok, state, `tab did not accept visibilityState=${state}`);
+  assert.strictEqual(got, state, `tab did not accept visibilityState=${state}`);
 }
+
+const presenceState = (cdp, sessionId) =>
+  evaluate(cdp, sessionId, "document.getElementById('presence').getAttribute('data-state')");
+
+const clickPresence = (cdp, sessionId) =>
+  evaluate(cdp, sessionId, "document.getElementById('presence').click(), true");
 
 // --- suite ----------------------------------------------------------------
 
@@ -162,21 +173,23 @@ async function main() {
   if (!fs.existsSync(CHROME)) {
     console.log(`  ↷ skipped: no Chrome at ${CHROME} (set EDDIE_TEST_CHROME)`);
     console.log('\nPassed: 0\nFailed: 0');
-    return process.exit(0);
+    return 0;
   }
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'eddie-sockets-'));
   const store = createSessionStore({ stateDir: path.join(tmp, 'state') });
-  const canvas = createPlanCanvasServer({ store, version: '9.9.9-test', idleTimeoutMs: 0 });
+  const canvas = createPlanCanvasServer({ store, version: '9.9.9-test', idleTimeoutMs: 0, maxStreams: MAX_STREAMS });
   await canvas.listen(0);
   const port = canvas.server.address().port;
 
   // Live event streams and artifact traffic, straight off the wire.
   const streams = new Set();
+  let peakStreams = 0;
   const artifactHits = [];
   canvas.server.on('request', (req, res) => {
     if (req.url.startsWith('/events/')) {
       streams.add(res);
+      peakStreams = Math.max(peakStreams, streams.size);
       req.on('close', () => streams.delete(res));
     } else if (req.url.startsWith('/artifact/')) {
       artifactHits.push({ method: req.method, url: req.url });
@@ -185,72 +198,107 @@ async function main() {
   const hitsFor = (key, method) =>
     artifactHits.filter(h => h.url.startsWith(`/artifact/${key}/`) && h.method === method).length;
 
-  const keys = [];
-  const files = [];
-  for (let i = 0; i <= VISIBLE_TABS; i++) {
-    const file = path.join(tmp, `art-${i}.html`);
-    fs.writeFileSync(file, `<!DOCTYPE html><html><body><h1>Artifact ${i}</h1></body></html>`);
-    files.push(file);
-    keys.push(store.open(file).session.key);
+  let made = 0;
+  function newArtifact() {
+    const file = path.join(tmp, `art-${made++}.html`);
+    fs.writeFileSync(file, `<!DOCTYPE html><html><body><h1>Artifact ${made}</h1></body></html>`);
+    return { file, key: store.open(file).session.key };
   }
 
   const { child, wsUrl, dir } = await launchChrome();
   const cdp = await Cdp.connect(wsUrl);
-  const tabs = [];
 
-  if ((await test(`${VISIBLE_TABS} visible canvases each hold one event stream`, async () => {
-    for (let i = 0; i < VISIBLE_TABS; i++) {
-      const sessionId = await openTab(cdp, `http://127.0.0.1:${port}/canvas/${keys[i]}`);
-      tabs.push(sessionId);
-      await waitFor(canvasLoaded(cdp, sessionId, keys[i]), { timeoutMs: LOAD_DEADLINE_MS, what: `tab ${i} to load` });
-      await setHidden(cdp, sessionId, false);
-    }
-    await waitFor(() => streams.size === VISIBLE_TABS, { what: `${VISIBLE_TABS} live streams` });
-    // Every canvas has recorded what its frame is showing (Gate C's baseline).
-    await waitFor(() => keys.slice(0, VISIBLE_TABS).every(k => hitsFor(k, 'HEAD') > 0), { what: 'artifact HEAD baselines' });
-  }))) { /* baseline holds */ } else throw new Error('baseline failed — later gates would be meaningless');
-
-  await test('Gate B: a hidden canvas gives its event-stream socket back', async () => {
-    for (let i = 1; i < VISIBLE_TABS; i++) await setHidden(cdp, tabs[i], true);
-    await waitFor(() => streams.size === 1, { what: 'parked tabs to release their streams' });
-    assert.strictEqual(streams.size, 1, 'only the visible canvas should hold a stream');
-  });
-
-  await test(`Gate A: a fresh canvas still loads with ${VISIBLE_TABS} canvases open`, async () => {
-    const last = VISIBLE_TABS;
-    const sessionId = await openTab(cdp, `http://127.0.0.1:${port}/canvas/${keys[last]}`);
-    tabs.push(sessionId);
-    const ms = await waitFor(canvasLoaded(cdp, sessionId, keys[last]), {
+  // Open a canvas and wait until it is actually up. Visible by default: the
+  // interesting cases are the ones where canvases compete for the budget.
+  async function openCanvas({ hidden = false } = {}) {
+    const { file, key } = newArtifact();
+    const sessionId = await openTab(cdp, `http://127.0.0.1:${port}/canvas/${key}`);
+    const ms = await waitFor(canvasLoaded(cdp, sessionId, key), {
       timeoutMs: LOAD_DEADLINE_MS,
-      what: `canvas ${last + 1} to load behind ${VISIBLE_TABS} open canvases`
+      what: `canvas ${key} to load`
     });
-    console.log(`      (loaded in ${ms}ms)`);
-  });
+    await waitFor(() => hitsFor(key, 'HEAD') > 0, { what: 'its artifact baseline' });
+    await setHidden(cdp, sessionId, hidden);
+    return { file, key, sessionId, ms };
+  }
 
-  await test('Gate C: returning to a parked canvas reloads an artifact that changed', async () => {
-    const i = 1;
-    const before = hitsFor(keys[i], 'GET');
-    const streamsBefore = streams.size;
-    fs.writeFileSync(files[i], '<!DOCTYPE html><html><body><h1>Artifact 1 — rewritten</h1></body></html>');
-    await sleep(300); // let the watcher fire into the void: nobody is listening
-    await setHidden(cdp, tabs[i], false);
-    await waitFor(() => hitsFor(keys[i], 'GET') > before, { what: 'the changed artifact to be re-fetched' });
-    await waitFor(() => streams.size === streamsBefore + 1, { what: 'the returning canvas to reconnect' });
-  });
+  try {
+    await test('B: a hidden canvas hands its stream back, and reclaims it on return', async () => {
+      const a = await openCanvas();
+      const b = await openCanvas();
+      await waitFor(() => streams.size === 2, { what: 'two live canvases' });
 
-  await test('Gate C: returning to an unchanged canvas does not reload it', async () => {
-    const i = 2;
-    const before = hitsFor(keys[i], 'GET');
-    await setHidden(cdp, tabs[i], false);
-    await waitFor(() => hitsFor(keys[i], 'HEAD') >= 2, { what: 'the return check' });
-    await sleep(600); // a debounced reload would have landed by now
-    assert.strictEqual(hitsFor(keys[i], 'GET'), before, 'unchanged artifact must not be re-fetched');
-  });
+      await setHidden(cdp, b.sessionId, true);
+      await waitFor(() => streams.size === 1, { what: 'the hidden canvas to release its stream' });
 
-  child.kill('SIGKILL');
-  await canvas.close();
-  fs.rmSync(tmp, { recursive: true, force: true });
-  fs.rmSync(dir, { recursive: true, force: true });
+      await setHidden(cdp, b.sessionId, false);
+      await waitFor(() => streams.size === 2, { what: 'the returning canvas to reconnect' });
+
+      // Two canvases are well inside the ration, so neither is paused.
+      assert.notStrictEqual(await presenceState(cdp, a.sessionId), 'paused');
+      assert.notStrictEqual(await presenceState(cdp, b.sessionId), 'paused');
+    });
+
+    // Everything below shares this crowd: more visible canvases than the
+    // ration allows, which is exactly the situation that used to wedge.
+    const crowd = [];
+    await test(`D: live streams never exceed the ration of ${MAX_STREAMS}, and the yielded canvas says so`, async () => {
+      while (crowd.length < MAX_STREAMS + 2) crowd.push(await openCanvas());
+      assert.ok(streams.size <= MAX_STREAMS, `live streams ${streams.size} exceeded the ration`);
+      // One over is the unavoidable in-flight connection: the server can only
+      // ration a stream once its request has landed, and it evicts before
+      // registering it. Anything beyond that is a real leak.
+      assert.ok(peakStreams <= MAX_STREAMS + 1, `live streams peaked at ${peakStreams}, over the ration`);
+
+      // The canvas looked at longest ago yielded — and shows it rather than
+      // going quietly stale.
+      await waitFor(async () => (await presenceState(cdp, crowd[0].sessionId)) === 'paused',
+        { what: 'the oldest canvas to report its feed paused' });
+
+      // Every canvas still rendered its document: nothing was starved.
+      for (const c of crowd) assert.ok(hitsFor(c.key, 'GET') > 0, `canvas ${c.key} never loaded its artifact`);
+    });
+
+    await test('D: clicking the paused canvas takes the live feed back', async () => {
+      await clickPresence(cdp, crowd[0].sessionId);
+      await waitFor(async () => (await presenceState(cdp, crowd[0].sessionId)) !== 'paused',
+        { what: 'the paused canvas to resume' });
+      assert.ok(streams.size <= MAX_STREAMS, 'resuming must not break the ration');
+    });
+
+    await test(`A: a fresh canvas still loads with ${MAX_STREAMS + 2} canvases already open`, async () => {
+      const fresh = await openCanvas();
+      console.log(`      (loaded in ${fresh.ms}ms)`);
+      assert.ok(streams.size <= MAX_STREAMS, 'the ration held while a new canvas opened');
+    });
+
+    await test('C: returning to a parked canvas reloads an artifact that changed', async () => {
+      const c = await openCanvas();
+      await setHidden(cdp, c.sessionId, true);
+      const before = hitsFor(c.key, 'GET');
+      fs.writeFileSync(c.file, '<!DOCTYPE html><html><body><h1>rewritten while parked</h1></body></html>');
+      await sleep(300); // the watcher fires into the void: nobody is listening
+      await setHidden(cdp, c.sessionId, false);
+      await waitFor(() => hitsFor(c.key, 'GET') > before, { what: 'the changed artifact to be re-fetched' });
+    });
+
+    await test('C: returning to an unchanged canvas does not reload it', async () => {
+      const c = await openCanvas();
+      await setHidden(cdp, c.sessionId, true);
+      const before = hitsFor(c.key, 'GET');
+      await setHidden(cdp, c.sessionId, false);
+      await waitFor(() => hitsFor(c.key, 'HEAD') >= 2, { what: 'the return check' });
+      await sleep(600); // a debounced reload would have landed by now
+      assert.strictEqual(hitsFor(c.key, 'GET'), before, 'unchanged artifact must not be re-fetched');
+    });
+  } finally {
+    // Always: a failed run used to leave a headless Chrome alive, holding
+    // sockets and answering Apple Events as if it were the real browser.
+    child.kill('SIGKILL');
+    await canvas.close().catch(() => {});
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 
   const passed = results.filter(Boolean).length;
   const failed = results.length - passed;
@@ -258,12 +306,14 @@ async function main() {
   console.log(`Passed: ${passed}`);
   console.log(`Failed: ${failed}`);
   console.log('='.repeat(40));
-  process.exit(failed > 0 ? 1 : 0);
+  return failed > 0 ? 1 : 0;
 }
 
-main().catch(err => {
-  console.error(err);
-  console.log('Passed: 0');
-  console.log('Failed: 1');
-  process.exit(1);
-});
+main()
+  .then(code => process.exit(code))
+  .catch(err => {
+    console.error(err);
+    console.log('Passed: 0');
+    console.log('Failed: 1');
+    process.exit(1);
+  });

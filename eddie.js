@@ -32,6 +32,7 @@ const {
   DEFAULT_HOST,
   createPlanCanvasServer,
   resolveIdleTimeoutMs,
+  resolveMaxStreams,
   resolvePort
 } = require('./lib/server');
 
@@ -57,7 +58,7 @@ function usage() {
     '         --timeout-ms <n>  Return {status:"waiting"} after n ms (tests/debug only)',
     '  server: --port <n> --host <h>',
     '',
-    'Environment: EDDIE_PORT, EDDIE_STATE_DIR, EDDIE_IDLE_MS'
+    'Environment: EDDIE_PORT, EDDIE_STATE_DIR, EDDIE_IDLE_MS, EDDIE_MAX_STREAMS'
   ].join('\n');
 }
 
@@ -211,6 +212,7 @@ async function cmdOpen(file, args, { stateDir, port }) {
     status: 'open',
     url,
     browser: launched ? 'opened' : 'not opened',
+    ...(res.body.note ? { note: res.body.note } : {}),
     next_step:
       'Run `eddie await <file>` and leave it running; it returns when the human sends feedback, a verdict, or ends the session.'
   };
@@ -334,6 +336,7 @@ async function cmdServer(args, { stateDir, port }) {
     host: hostArg || DEFAULT_HOST,
     version: VERSION,
     idleTimeoutMs: resolveIdleTimeoutMs(),
+    maxStreams: resolveMaxStreams(),
     onIdleShutdown: () => shutdown(0),
     log: line => process.stderr.write(`${line}\n`)
   });

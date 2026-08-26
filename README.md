@@ -67,6 +67,21 @@ flowchart TD
 вызовом `eddie await <file> --resolve "fb-1:done:заменил Q3 на Q4"` с
 честным статусом (`done` / `answered` / `declined`).
 
+### Много открытых канвасов
+
+Браузер делит ~6 соединений на origin между **всеми** вкладками, а живое
+обновление канваса — это соединение. Поэтому Eddie их экономит: скрытая
+вкладка отдаёт соединение и забирает обратно при возврате (догоняя всё, что
+пропустила), а живых потоков одновременно не больше `EDDIE_MAX_STREAMS`
+(по умолчанию 4). Если канвасов открыто больше, тот, на который ты смотрел
+дольше всех, ставит живое обновление на паузу и честно пишет об этом в шапке —
+нажми на плашку, чтобы вернуть. Остальное в нём работает и на паузе:
+документ виден, пометки уходят агенту.
+
+Смысл простой: новый канвас открывается всегда, сколько бы вкладок ни висело.
+Посмотреть текущий расклад — `curl 127.0.0.1:4519/health`
+(`streams` из `streamBudget`).
+
 ### Безопасность
 
 Сервер слушает только `127.0.0.1` и отклоняет запросы с чужим `Host`/`Origin`
@@ -148,6 +163,21 @@ replacement, `before → after`, applied as-is), and `verdict`
 Every item except `verdict` is a task the agent must close with
 `eddie await <file> --resolve "fb-1:done:replaced Q3 with Q4"`, using an
 honest status (`done` / `answered` / `declined`).
+
+### Many canvases open at once
+
+A browser shares ~6 connections per origin across **all** of its tabs, and a
+canvas's live feed is one of them. So Eddie rations them: a hidden canvas hands
+its connection back and reclaims it on return (catching up on whatever it
+missed), and at most `EDDIE_MAX_STREAMS` canvases (default 4) hold a live feed
+at a time. Open more than that and the one you looked at longest ago pauses its
+live updates and says so in its header — click the chip to take it back.
+Everything else keeps working while paused: the document renders, annotations
+still reach the agent.
+
+The guarantee is simple: a new canvas always opens, however many tabs are
+already there. To see the current picture: `curl 127.0.0.1:4519/health`
+(`streams` of `streamBudget`).
 
 ### Security
 

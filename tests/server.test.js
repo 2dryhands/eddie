@@ -165,9 +165,16 @@ async function main() {
   let key = null;
   let htmlKey = null;
 
-  if (await test('GET /health identifies the app and version', async () => {
+  if (await test('GET /health identifies the app, version and live-stream ration', async () => {
     const res = await request(port, 'GET', '/health');
-    assert.deepStrictEqual(jsonBody(res), { ok: true, app: 'eddie', version: '9.9.9-test' });
+    const body = jsonBody(res);
+    assert.strictEqual(body.ok, true);
+    assert.strictEqual(body.app, 'eddie');
+    assert.strictEqual(body.version, '9.9.9-test');
+    // The ration is part of the contract: it is how the CLI (and a human with
+    // curl) sees whether canvases are competing for the browser's sockets.
+    assert.strictEqual(body.streams, 0);
+    assert.ok(Number.isInteger(body.streamBudget) && body.streamBudget > 0, 'streamBudget is a positive integer');
   })) passed++; else failed++;
 
   if (await test('requests with a non-loopback Host header are rejected', async () => {
