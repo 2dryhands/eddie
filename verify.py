@@ -185,8 +185,15 @@ def plan(root: Path, full: bool, staged: bool = False) -> list[Check]:
     else:
         for p in py_files:
             if has_selftest(p):
+                limit = file_timeout(p)
+                if staged and limit > TIMEOUT:
+                    # pre-commit должен быть быстрым: тяжёлый selftest (свой потолок выше общего)
+                    # тут не гоняем — он обязателен в --full перед «готово»
+                    checks.append(Check("S", f"{p.relative_to(root)} --selftest ⏭ тяжёлый ({limit} с), только --full",
+                                        fn=lambda: None))
+                    continue
                 checks.append(Check("S", f"{p.relative_to(root)} --selftest", cmd=selftest_cmd(root, p, py),
-                                    timeout=file_timeout(p)))
+                                    timeout=limit))
         if full:
             dirs = test_dirs(root)
             if dirs:
@@ -356,6 +363,23 @@ def selftest() -> int:
          make_repo({"scripts/slow.py": "# verify: timeout=20\n" +
                     "import sys, time\nif '--selftest' in sys.argv:\n    time.sleep(2)\n"}), True, True)
     TIMEOUT = saved
+    # 13. --staged не гоняет тяжёлый selftest (маркер выше общего потолка): pre-commit быстрый
+    saved, TIMEOUT = TIMEOUT, 1
+    r13 = make_repo({"scripts/heavy.py": "# verify: timeout=600\n" +
+                     "import sys, time\nif '--selftest' in sys.argv:\n    time.sleep(3); sys.exit(1)\n"})
+    (r13 / "scripts" / "heavy.py").write_text((r13 / "scripts" / "heavy.py").read_text() + "# touched\n")
+    subprocess.run(["git", "-C", str(r13), "add", "-A"], check=True)
+    t13 = time.time()
+    ok13, res13 = run(r13, False, quiet=True, staged=True)
+    TIMEOUT = saved
+    probs = []
+    if not ok13:
+        probs.append("ждал PASS (тяжёлый пропущен), получил FAIL")
+    if time.time() - t13 > 2.5:
+        probs.append("тяжёлый selftest всё-таки запустился в --staged")
+    if not any("⏭" in c.name for c, *_ in res13):
+        probs.append("нет пометки ⏭ о пропуске")
+    cases.append(("13. --staged пропускает тяжёлый selftest (# verify: timeout выше потолка)", probs, set()))
 
     print(f"Selftest verify.py ({len(cases)} сценариев):")
     failures = 0
