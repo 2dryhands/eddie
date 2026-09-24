@@ -9,10 +9,11 @@ set -euo pipefail
 RED=$'\033[31m'; YEL=$'\033[33m'; GRN=$'\033[32m'; NC=$'\033[0m'
 
 secret_gate() {
-  # 1) Имена файлов, которых в коммите быть не должно (на случай force-add в обход .gitignore)
+  # 1) Имена файлов, которых в коммите быть не должно (на случай force-add в обход .gitignore).
+  #    Только ERE: lookahead (?!…) BSD-grep на Маке не понимает, падал молча — .env не ловился (24.09.2026)
   local BAD_NAMES
   BAD_NAMES=$(git diff --cached --name-only --diff-filter=ACM \
-    | grep -iE '(^|/)\.env($|\.(?!example))|\.env\.[^.]*$|\.session$|id_rsa|service.*account.*\.json$|\.p12$|secrets\.|\.pem$' \
+    | grep -iE '(^|/)\.env($|\.)|\.env\.[^.]*$|\.session$|id_rsa|service.*account.*\.json$|\.p12$|secrets\.|\.pem$' \
     | grep -viE '\.example($|\.)' || true)
   if [[ -n "$BAD_NAMES" ]]; then
     echo "${RED}✖ pre-commit: в коммит попали файлы, похожие на секреты:${NC}"

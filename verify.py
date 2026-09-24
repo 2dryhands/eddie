@@ -59,7 +59,9 @@ def python_exe(root: Path) -> str:
 def walk_files(root: Path):
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDE_DIRS
-                             and not (Path(dirpath) / d).is_symlink())
+                             and not (Path(dirpath) / d).is_symlink()
+                             # любое виртуальное окружение (.venv-jev, env311…) — чужие библиотеки, не код проекта
+                             and not (Path(dirpath) / d / "pyvenv.cfg").exists())
         for f in sorted(filenames):
             yield Path(dirpath) / f
 
