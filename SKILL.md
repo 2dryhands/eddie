@@ -96,6 +96,13 @@ eddie await plan.md \
   remains valid protocol input — other clients or older flows may still send
   it — and simply means "revise and keep listening." A verdict is never
   itself a task — it doesn't need `--resolve`.
+- `kind: "rating"` — a design score from the strip above the document:
+  `score` (integer 1–10, 10 = top), `subject` (the variant on screen, from
+  `<html data-eddie-subject="…">`, else the file name), `comment`, `file`,
+  `ts`. The server has already appended it to the taste journal
+  (`EDDIE_RATINGS`, default `~/.claude/skills-design/ratings.jsonl`), so
+  don't log it again. Not a task — no `--resolve`; act on the comment if
+  it asks for something.
 
 ## Tasks Lifecycle
 

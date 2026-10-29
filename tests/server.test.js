@@ -149,6 +149,8 @@ async function main() {
   fs.writeFileSync(path.join(tmp, 'clip.mp4'), 'fake-mp4-bytes');
   fs.writeFileSync(path.join(os.tmpdir(), 'eddie-outside.txt'), 'secret');
 
+  const ratingsFile = path.join(tmp, 'taste', 'ratings.jsonl');
+  process.env.EDDIE_RATINGS = ratingsFile; // the server's default picks this up
   const store = createSessionStore({ stateDir: path.join(tmp, 'state') });
   let idleFired = false;
   const canvas = createPlanCanvasServer({
@@ -492,6 +494,68 @@ async function main() {
     await waitFor(() => sse.received.some(e => e.event === 'presence' && e.data.state === 'working'));
     await waitFor(() => sse.received.some(e => e.event === 'chat-sync' && e.data.chat.length === 2));
     sse.close();
+  })) passed++; else failed++;
+
+  if (await test('rating: delivered via await, journaled to EDDIE_RATINGS, read back per subject', async () => {
+    const awaitPromise = request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}`);
+    const post = await request(port, 'POST', `/api/session/${key}/feedback`, {
+      body: { items: [
+        { kind: 'rating', score: 8, subject: 'brutalism', text: 'сильная типографика' },
+        { kind: 'rating', score: 3, text: '' }
+      ] }
+    });
+    assert.strictEqual(post.statusCode, 200);
+    assert.strictEqual(jsonBody(post).accepted, 2);
+
+    const result = jsonBody(await awaitPromise);
+    assert.strictEqual(result.status, 'feedback');
+    const [r1, r2] = result.items;
+    assert.strictEqual(r1.kind, 'rating');
+    assert.strictEqual(r1.score, 8);
+    assert.strictEqual(r1.subject, 'brutalism');
+    assert.strictEqual(r1.comment, 'сильная типографика');
+    assert.strictEqual(r1.file, fs.realpathSync(artifact));
+    assert.ok(r1.ts, 'rating carries ts');
+    assert.strictEqual(r2.subject, 'demo.plan.md', 'no subject → the open file');
+    assert.ok(!store.get(key).tasks.some(t => t.kind === 'rating'), 'ratings are not tasks to --resolve');
+
+    const lines = fs.readFileSync(ratingsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+    assert.strictEqual(lines.length, 2);
+    assert.deepStrictEqual(Object.keys(lines[0]).sort(), ['comment', 'file', 'score', 'subject', 'ts']);
+    assert.strictEqual(lines[0].score, 8);
+    assert.strictEqual(lines[1].subject, 'demo.plan.md');
+
+    // re-rate: latest wins in the read-back
+    await request(port, 'POST', `/api/session/${key}/feedback`, { body: { items: [{ kind: 'rating', score: 10, subject: 'brutalism' }] } });
+    const back = jsonBody(await request(port, 'GET', `/api/session/${key}/ratings`));
+    assert.strictEqual(back.ratings.brutalism.score, 10);
+    assert.strictEqual(back.ratings['demo.plan.md'].score, 3);
+    assert.strictEqual(fs.readFileSync(ratingsFile, 'utf8').trim().split('\n').length, 3, 'journal is append-only');
+    await request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}&timeoutMs=0`); // drain
+  })) passed++; else failed++;
+
+  if (await test('rating: score outside integer 1-10 is a 400 and never journaled', async () => {
+    const before = fs.readFileSync(ratingsFile, 'utf8');
+    for (const score of [0, 11, 7.5, '8', null, undefined, -1]) {
+      const res = await request(port, 'POST', `/api/session/${key}/feedback`, {
+        body: { items: [{ kind: 'chat', text: 'rides along' }, { kind: 'rating', score, subject: 'x' }] }
+      });
+      assert.strictEqual(res.statusCode, 400, `score ${JSON.stringify(score)}`);
+    }
+    assert.strictEqual(fs.readFileSync(ratingsFile, 'utf8'), before);
+    const idle = jsonBody(await request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}&timeoutMs=0`));
+    assert.strictEqual(idle.status, 'waiting', 'rejected batch queued nothing');
+  })) passed++; else failed++;
+
+  if (await test('rating bar is wired: strip above the document, SDK reports data-eddie-subject', async () => {
+    const canvasPage = await request(port, 'GET', `/canvas/${key}`);
+    assert.ok(canvasPage.body.indexOf('id="rateBar"') < canvasPage.body.indexOf('class="layout"'), 'strip sits above the layout, outside the panel');
+    assert.strictEqual((canvasPage.body.match(/class="rb-score"/g) || []).length, 10);
+    const sdk = await request(port, 'GET', '/sdk.js');
+    assert.ok(sdk.body.includes("attributeFilter: ['data-eddie-subject']"));
+    assert.ok(sdk.body.includes("type: 'pc:subject'"));
+    const client = await request(port, 'GET', '/client.js');
+    assert.ok(client.body.includes("msg.type === 'pc:subject'"));
   })) passed++; else failed++;
 
   if (await test('long-poll heartbeat whitespace arrives before the payload', async () => {
