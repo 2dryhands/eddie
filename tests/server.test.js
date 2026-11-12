@@ -147,6 +147,8 @@ async function main() {
   fs.writeFileSync(htmlArtifact, '<!DOCTYPE html><html><body><h1>Report</h1></body></html>');
   fs.writeFileSync(path.join(tmp, 'style.css'), 'body { color: red }');
   fs.writeFileSync(path.join(tmp, 'clip.mp4'), 'fake-mp4-bytes');
+  fs.writeFileSync(path.join(tmp, 'case-phynder.html'), '<!DOCTYPE html><html><body><h1>Phynder case</h1></body></html>');
+  fs.writeFileSync(path.join(os.tmpdir(), 'eddie-outside.html'), '<html><body>secret</body></html>');
   fs.writeFileSync(path.join(os.tmpdir(), 'eddie-outside.txt'), 'secret');
 
   const ratingsFile = path.join(tmp, 'taste', 'ratings.jsonl');
@@ -300,6 +302,22 @@ async function main() {
     assert.strictEqual(res.statusCode, 200);
     assert.strictEqual(res.headers['content-type'], 'video/mp4');
     assert.strictEqual(res.headers['accept-ranges'], 'bytes', 'full responses advertise range support');
+  })) passed++; else failed++;
+
+  // A link inside the artifact (cases.html -> case-phynder.html) navigates the
+  // iframe to a sibling page: it must get the same beacon + SDK as the root, or
+  // annotations and the ready signal die on the nested page.
+  if (await test('sibling .html pages get the beacon and SDK injected; traversal still 403', async () => {
+    const res = await request(port, 'GET', `/artifact/${htmlKey}/case-phynder.html`);
+    assert.strictEqual(res.statusCode, 200);
+    assert.ok(/text\/html/.test(res.headers['content-type']));
+    assert.ok(res.body.includes('<h1>Phynder case</h1>'));
+    assert.ok(res.body.includes('<script src="/sdk.js"></script>\n</body>'), 'sdk tag before </body>');
+    assert.ok(res.body.includes('pc:alive'), 'early beacon present');
+    const escape = await request(port, 'GET', `/artifact/${htmlKey}/..%2Feddie-outside.html`);
+    assert.strictEqual(escape.statusCode, 403, 'html outside the artifact dir stays forbidden');
+    const css = await request(port, 'GET', `/artifact/${htmlKey}/style.css`);
+    assert.ok(!css.body.includes('/sdk.js'), 'non-html assets are never injected');
   })) passed++; else failed++;
 
   // clip.mp4 body is the 14-byte string 'fake-mp4-bytes' (indices 0..13).
@@ -494,6 +512,28 @@ async function main() {
     await waitFor(() => sse.received.some(e => e.event === 'presence' && e.data.state === 'working'));
     await waitFor(() => sse.received.some(e => e.event === 'chat-sync' && e.data.chat.length === 2));
     sse.close();
+  })) passed++; else failed++;
+
+  if (await test('annotation from a nested page carries anchor.page through to await', async () => {
+    const awaitPromise = request(port, 'GET', `/api/await?file=${encodeURIComponent(htmlArtifact)}`);
+    const post = await request(port, 'POST', `/api/session/${htmlKey}/feedback`, {
+      body: { items: [
+        { kind: 'annotation', text: 'fix this', anchor: { selector: 'h1', tag: 'h1', snippet: 'Phynder case', page: 'case-phynder.html' } },
+        { kind: 'edit', text: '', edit: { before: 'a', after: 'b' }, anchor: { selector: 'h1', tag: 'text', snippet: 'a', page: 'case-phynder.html' } },
+        { kind: 'annotation', text: 'root page', anchor: { selector: 'h1', tag: 'h1', snippet: 'Report' } }
+      ] }
+    });
+    assert.strictEqual(jsonBody(post).accepted, 3);
+    const result = jsonBody(await awaitPromise);
+    assert.strictEqual(result.items[0].anchor.page, 'case-phynder.html');
+    assert.strictEqual(result.items[1].anchor.page, 'case-phynder.html');
+    assert.ok(!('page' in result.items[2].anchor), 'root page annotations carry no page field');
+    const sdk = await request(port, 'GET', '/sdk.js');
+    assert.ok(sdk.body.includes('location.pathname'), 'sdk derives the page from its own URL');
+    // A nested page must never save over the root file or reuse the root's change baseline.
+    assert.ok(sdk.body.includes('editable = Boolean(msg.editable) && !page'), 'live edit is off on a nested page');
+    assert.ok(/'pc:set-baseline' && !page/.test(sdk.body), 'root baseline is not applied to a nested page');
+    assert.ok(/'pc:collect-blocks' && !page/.test(sdk.body), 'nested page never overwrites the root baseline');
   })) passed++; else failed++;
 
   if (await test('rating: delivered via await, journaled to EDDIE_RATINGS, read back per subject', async () => {

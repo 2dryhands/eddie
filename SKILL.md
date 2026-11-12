@@ -82,6 +82,10 @@ eddie await plan.md \
 - `kind: "annotation"` — feedback anchored to an element (`anchor.selector`,
   `anchor.snippet` show what they pointed at; `anchor.textRange.text` when
   they highlighted a passage instead of clicking a whole block).
+  `anchor.page` (2026-11-12) — set when the note came from a sibling page the
+  human opened via a link inside the artifact (e.g. `case-phynder.html`, path
+  relative to the artifact's folder): edit THAT file, not the opened one.
+  Absent = the opened file. Live edit is off on sibling pages.
 - `kind: "edit"` — the human selected text and typed a replacement. Carries
   `edit.before` and `edit.after`. Apply it to the artifact file as an
   **exact text replacement** of `before` with `after` — do not paraphrase,
