@@ -521,7 +521,8 @@ async function main() {
 
     const lines = fs.readFileSync(ratingsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l));
     assert.strictEqual(lines.length, 2);
-    assert.deepStrictEqual(Object.keys(lines[0]).sort(), ['comment', 'file', 'score', 'subject', 'ts']);
+    assert.deepStrictEqual(Object.keys(lines[0]).sort(), ['comment', 'file', 'prompt', 'score', 'skill', 'subject', 'ts']);
+    assert.strictEqual(lines[0].skill, null, 'no declared skill → honest null in the journal');
     assert.strictEqual(lines[0].score, 8);
     assert.strictEqual(lines[1].subject, 'demo.plan.md');
 
@@ -532,6 +533,21 @@ async function main() {
     assert.strictEqual(back.ratings['demo.plan.md'].score, 3);
     assert.strictEqual(fs.readFileSync(ratingsFile, 'utf8').trim().split('\n').length, 3, 'journal is append-only');
     await request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}&timeoutMs=0`); // drain
+  })) passed++; else failed++;
+
+  if (await test('rating: declared design skill + prompt ride along to the agent and the journal', async () => {
+    const awaitPromise = request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}`);
+    const prompt = 'Скилл: bolder\nКомпозиция: один гигантский KPI на весь экран';
+    await request(port, 'POST', `/api/session/${key}/feedback`, {
+      body: { items: [{ kind: 'rating', score: 6, subject: 'v2', skill: '  bolder ', prompt, text: '' }] }
+    });
+    const [item] = jsonBody(await awaitPromise).items;
+    assert.strictEqual(item.skill, 'bolder');
+    assert.strictEqual(item.prompt, prompt);
+    const last = JSON.parse(fs.readFileSync(ratingsFile, 'utf8').trim().split('\n').pop());
+    assert.strictEqual(last.skill, 'bolder');
+    assert.strictEqual(last.prompt, prompt);
+    assert.strictEqual(last.subject, 'v2');
   })) passed++; else failed++;
 
   if (await test('rating: score outside integer 1-10 is a 400 and never journaled', async () => {
@@ -552,7 +568,10 @@ async function main() {
     assert.ok(canvasPage.body.indexOf('id="rateBar"') < canvasPage.body.indexOf('class="layout"'), 'strip sits above the layout, outside the panel');
     assert.strictEqual((canvasPage.body.match(/class="rb-score"/g) || []).length, 10);
     const sdk = await request(port, 'GET', '/sdk.js');
-    assert.ok(sdk.body.includes("attributeFilter: ['data-eddie-subject']"));
+    assert.ok(sdk.body.includes("attributeFilter: ['data-eddie-subject', 'data-eddie-skill', 'data-eddie-prompt']"));
+    assert.ok(sdk.body.includes('eddie:design-skill') && sdk.body.includes('eddie:design-prompt'), 'SDK reads the declared design meta');
+    assert.ok(canvasPage.body.indexOf('id="rateDesign"') > canvasPage.body.indexOf('id="rateBar"'), 'skill chip lives in the strip');
+    assert.ok(canvasPage.body.includes('id="ratePrompt"'), 'prompt drawer present');
     assert.ok(sdk.body.includes("type: 'pc:subject'"));
     const client = await request(port, 'GET', '/client.js');
     assert.ok(client.body.includes("msg.type === 'pc:subject'"));

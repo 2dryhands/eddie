@@ -99,7 +99,13 @@ eddie await plan.md \
 - `kind: "rating"` — a design score from the strip above the document:
   `score` (integer 1–10, 10 = top), `subject` (the variant on screen, from
   `<html data-eddie-subject="…">`, else the file name), `comment`, `file`,
-  `ts`. The server has already appended it to the taste journal
+  `skill`, `prompt`, `ts`. `skill`/`prompt` are what the page declared it was
+  built with — `<meta name="eddie:design-skill" content="…">` and
+  `<meta name="eddie:design-prompt" content="…">`, or per variant via
+  `data-eddie-skill` / `data-eddie-prompt` on `<html>` — and `null` when it
+  declared nothing. The strip shows the skill as a chip (click → the full
+  prompt), or an orange "not declared" chip, so the reviewer knows what they
+  are scoring. The server has already appended it to the taste journal
   (`EDDIE_RATINGS`, default `~/.claude/skills-design/ratings.jsonl`), so
   don't log it again. Not a task — no `--resolve`; act on the comment if
   it asks for something.
