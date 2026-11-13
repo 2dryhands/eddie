@@ -13,6 +13,11 @@
  *      the other field stays empty, and the caret is still in the field
  *   2  once the page clears the field itself (sent), the old text stays gone
  *   3  a draft for a field the new build no longer has is dropped quietly
+ *   4  restoring never makes Eddie write the file (a field inside a
+ *      live-edit text block used to trigger a save over the agent's write)
+ *   5  a draft never covers new text the agent put in the field
+ *   6  a page setting thousands of field values stays fast (no O(n²))
+ *   7  a hostile page can't flood the chrome's storage through pc:draft
  *
  * Run with: node tests/drafts.test.js
  */
@@ -45,8 +50,8 @@ function card(to) {
   return `<article data-to="${to}"><p>Card ${to}</p><textarea></textarea>` +
     `<button class="send" onclick="this.closest('[data-to]').querySelector('textarea').value=''">Send</button></article>`;
 }
-function page(build, cards) {
-  return `<!DOCTYPE html><html><body><h1>build ${build}</h1>${cards.map(card).join('')}</body></html>`;
+function page(build, cards, extra = '') {
+  return `<!DOCTYPE html><html><body><h1>build ${build}</h1>${cards.map(card).join('')}${extra}</body></html>`;
 }
 
 async function main() {
@@ -72,7 +77,7 @@ async function main() {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ file })
   }).then(r => r.json());
   const key = opened.key;
-  function rebuild(cards) { fs.writeFileSync(file, page(++build, cards)); }
+  function rebuild(cards, extra) { fs.writeFileSync(file, page(++build, cards, extra)); }
 
   const { child, wsUrl, dir } = await launchChrome();
   const cdp = await Cdp.connect(wsUrl);
@@ -167,6 +172,63 @@ async function main() {
       rebuild(['a', 'b']);
       await waitBuild(build);
       assert.deepStrictEqual(await values(), ['', 'ответ карточке b']);
+    });
+
+    await test('4: restoring a draft inside a live-edit text block does not write the file', async () => {
+      const li = '<ul><li>Reply: <textarea></textarea></li></ul>';
+      rebuild([], li);
+      await waitBuild(build);
+      await typeInto(0, 'в пункте списка');
+      rebuild([], li);
+      const written = fs.readFileSync(file, 'utf8');
+      await waitBuild(build);
+      assert.deepStrictEqual(await values(), ['в пункте списка']);
+      await sleep(1500); // a live-edit save lands ~650 ms after the input
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), written, 'Eddie rewrote the artifact on restore');
+    });
+
+    await test('5: a draft does not cover new text the agent put into the field', async () => {
+      const pre = v => `<article data-to="pre"><textarea>suggestion ${v}</textarea></article>`;
+      rebuild([], pre('v1'));
+      await waitBuild(build);
+      await inFrame("(() => { const t = document.querySelector('textarea'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); })()");
+      await cdp.send('Input.insertText', { text: ' + my edit' }, sessionId);
+      await sleep(150);
+      rebuild([], pre('v1')); // same suggestion: the edit comes back
+      await waitBuild(build);
+      assert.deepStrictEqual(await values(), ['suggestion v1 + my edit']);
+      rebuild([], pre('v2')); // the agent rewrote it: its text wins
+      await waitBuild(build);
+      assert.deepStrictEqual(await values(), ['suggestion v2']);
+      rebuild([], pre('v2')); // and the stale draft is gone for good
+      await waitBuild(build);
+      assert.deepStrictEqual(await values(), ['suggestion v2']);
+    });
+
+    await test('6: a page filling 3000 fields by script stays fast', async () => {
+      const ms = await inFrame(`(() => {
+        const box = document.createElement('div');
+        box.innerHTML = '<input>'.repeat(3000);
+        document.body.appendChild(box);
+        const t0 = performance.now();
+        box.querySelectorAll('input').forEach((el, i) => { el.value = String(i); });
+        return performance.now() - t0;
+      })()`);
+      console.log(`      (${Math.round(ms)}ms)`);
+      assert.ok(ms < 300, `setting 3000 values took ${Math.round(ms)}ms`);
+    });
+
+    await test('7: a page flooding pc:draft cannot fill the chrome storage', async () => {
+      await inFrame(`(() => {
+        for (let i = 0; i < 300; i++) parent.postMessage({ type: 'pc:draft', key: 'k' + i, value: 'x'.repeat(49000), base: '' }, '*');
+        parent.postMessage({ type: 'pc:draft', key: 'k'.repeat(100000), value: 'y', base: '' }, '*');
+        return true;
+      })()`);
+      await sleep(1500);
+      const size = await evaluate(cdp, sessionId,
+        "Object.keys(localStorage).filter(k => k.startsWith('eddie-drafts:')).reduce((n, k) => n + localStorage.getItem(k).length, 0)", 5000);
+      assert.ok(size > 0 && size <= 400000, `drafts storage is ${size} chars`);
+      assert.strictEqual(await evaluate(cdp, sessionId, "(() => { try { localStorage.setItem('probe', 'x'.repeat(100000)); localStorage.removeItem('probe'); return true; } catch (e) { return e.name; } })()"), true);
     });
   } finally {
     const exited = child.exitCode !== null || child.signalCode !== null
