@@ -169,8 +169,11 @@ These apply to every artifact you open in Eddie, on every revision:
   every reload, caret included. Keep it attached to the right place: give
   the field an `id`, or put it inside a card with a stable `id` or
   `data-to`; otherwise it is matched by position. After your page sends the
-  text, clear the field (`ta.value = ''`) — that is what tells Eddie the
-  draft is gone. A field the new build no longer has is skipped.
+  text, clear the field (`ta.value = ''` or `form.reset()`) — that is what
+  tells Eddie the draft is gone; replacing the field with a fresh element
+  does not, and the sent text would come back on the next reload. A field
+  the new build no longer has is skipped; if you change a field's own
+  prefilled text, yours wins over the human's old draft.
 
 ## Rules
 

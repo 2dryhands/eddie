@@ -18,6 +18,8 @@
  *   5  a draft never covers new text the agent put in the field
  *   6  a page setting thousands of field values stays fast (no O(n²))
  *   7  a hostile page can't flood the chrome's storage through pc:draft
+ *   8  two cards copied with the same field id keep separate drafts
+ *   9  a form cleared with form.reset() after sending forgets the draft
  *
  * Run with: node tests/drafts.test.js
  */
@@ -229,6 +231,30 @@ async function main() {
         "Object.keys(localStorage).filter(k => k.startsWith('eddie-drafts:')).reduce((n, k) => n + localStorage.getItem(k).length, 0)", 5000);
       assert.ok(size > 0 && size <= 400000, `drafts storage is ${size} chars`);
       assert.strictEqual(await evaluate(cdp, sessionId, "(() => { try { localStorage.setItem('probe', 'x'.repeat(100000)); localStorage.removeItem('probe'); return true; } catch (e) { return e.name; } })()"), true);
+    });
+
+    await test('8: two cards copied with the same field id keep separate drafts', async () => {
+      const dup = '<article data-to="x"><textarea id="reply"></textarea></article><article data-to="y"><textarea id="reply"></textarea></article>';
+      rebuild([], dup);
+      await waitBuild(build);
+      await typeInto(0, 'ответ X');
+      await typeInto(1, 'ответ Y');
+      rebuild([], dup);
+      await waitBuild(build);
+      assert.deepStrictEqual(await values(), ['ответ X', 'ответ Y']);
+    });
+
+    await test('9: a form cleared with form.reset() after sending forgets the draft', async () => {
+      const form = '<form onsubmit="event.preventDefault(); this.reset()"><textarea name="m"></textarea><button>Send</button></form>';
+      rebuild([], form);
+      await waitBuild(build);
+      await typeInto(0, 'sent text');
+      await inFrame("document.querySelector('form button').click(), true");
+      await sleep(200);
+      assert.deepStrictEqual(await values(), ['']);
+      rebuild([], form);
+      await waitBuild(build);
+      assert.deepStrictEqual(await values(), [''], 'a reset form got its sent text back');
     });
   } finally {
     const exited = child.exitCode !== null || child.signalCode !== null
