@@ -164,6 +164,13 @@ These apply to every artifact you open in Eddie, on every revision:
   dashboards) has nothing for the block-level diff to match, so those
   artifacts need you to visually flag what changed yourself (a "changed"
   class/badge, a highlighted border, an inline note) on every revision.
+- **Typed text survives your rebuilds.** Text the human types into the
+  page's own `<textarea>` / text `<input>` but hasn't sent is restored after
+  every reload, caret included. Keep it attached to the right place: give
+  the field an `id`, or put it inside a card with a stable `id` or
+  `data-to`; otherwise it is matched by position. After your page sends the
+  text, clear the field (`ta.value = ''`) — that is what tells Eddie the
+  draft is gone. A field the new build no longer has is skipped.
 
 ## Rules
 

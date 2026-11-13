@@ -3,7 +3,7 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 // HEAVY: live CLI processes and a real Chrome — ~90% of the wall time, balloons under load.
 // `--quick` (smoke.py / quick verify) skips them; plain `npm test` (verify --full) runs everything.
-const HEAVY = ['e2e.test.js', 'socket-budget.test.js'];
+const HEAVY = ['e2e.test.js', 'socket-budget.test.js', 'drafts.test.js'];
 const quick = process.argv.includes('--quick');
 const files = ['i18n.test.js', 'sessions.test.js', 'markdown.test.js', 'server.test.js', ...(quick ? [] : HEAVY)];
 let failed = false;
