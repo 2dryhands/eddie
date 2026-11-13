@@ -294,10 +294,16 @@ async function main() {
   } finally {
     // Always: a failed run used to leave a headless Chrome alive, holding
     // sockets and answering Apple Events as if it were the real browser.
+    const exited = child.exitCode !== null || child.signalCode !== null
+      ? Promise.resolve() : new Promise(r => child.once('exit', r));
     child.kill('SIGKILL');
+    await exited;
     await canvas.close().catch(() => {});
-    fs.rmSync(tmp, { recursive: true, force: true });
-    fs.rmSync(dir, { recursive: true, force: true });
+    // Chrome's helper processes can still be flushing the profile after the
+    // main process dies (ENOTEMPTY ~1 run in 3), so retry the removal.
+    const rm = p => fs.rmSync(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    rm(tmp);
+    rm(dir);
   }
 
   const passed = results.filter(Boolean).length;

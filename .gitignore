@@ -2,3 +2,13 @@ node_modules/
 .DS_Store
 .superpowers/
 .env
+.worktrees/
+.claude/
+# внутренняя кухня — живёт в internal/ (отдельный приватный репо eddie-internal), в корне симлинки
+internal/
+CLAUDE.md
+AGENTS.md
+smoke.py
+verify.py
+.aislop
+.githooks

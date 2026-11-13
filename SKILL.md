@@ -83,7 +83,7 @@ eddie await plan.md \
   `anchor.snippet` show what they pointed at; `anchor.textRange.text` when
   they highlighted a passage instead of clicking a whole block).
   `anchor.page` (2026-11-12) — set when the note came from a sibling page the
-  human opened via a link inside the artifact (e.g. `case-phynder.html`, path
+  human opened via a link inside the artifact (e.g. `case-study.html`, path
   relative to the artifact's folder): edit THAT file, not the opened one.
   Absent = the opened file. Live edit is off on sibling pages.
 - `kind: "edit"` — the human selected text and typed a replacement. Carries
@@ -110,7 +110,7 @@ eddie await plan.md \
   declared nothing. The strip shows the skill as a chip (click → the full
   prompt), or an orange "not declared" chip, so the reviewer knows what they
   are scoring. The server has already appended it to the taste journal
-  (`EDDIE_RATINGS`, default `~/.claude/skills-design/ratings.jsonl`), so
+  (`EDDIE_RATINGS`, default `~/.eddie/ratings.jsonl`), so
   don't log it again. Not a task — no `--resolve`; act on the comment if
   it asks for something.
 

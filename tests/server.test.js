@@ -14,7 +14,7 @@ const os = require('os');
 const path = require('path');
 
 const { createSessionStore } = require('../lib/sessions');
-const { createPlanCanvasServer, parseByteRange } = require('../lib/server');
+const { createPlanCanvasServer, parseByteRange, resolveRatingsFile } = require('../lib/server');
 
 async function test(name, fn) {
   try {
@@ -147,7 +147,7 @@ async function main() {
   fs.writeFileSync(htmlArtifact, '<!DOCTYPE html><html><body><h1>Report</h1></body></html>');
   fs.writeFileSync(path.join(tmp, 'style.css'), 'body { color: red }');
   fs.writeFileSync(path.join(tmp, 'clip.mp4'), 'fake-mp4-bytes');
-  fs.writeFileSync(path.join(tmp, 'case-phynder.html'), '<!DOCTYPE html><html><body><h1>Phynder case</h1></body></html>');
+  fs.writeFileSync(path.join(tmp, 'case-study.html'), '<!DOCTYPE html><html><body><h1>Case study</h1></body></html>');
   fs.writeFileSync(path.join(os.tmpdir(), 'eddie-outside.html'), '<html><body>secret</body></html>');
   fs.writeFileSync(path.join(os.tmpdir(), 'eddie-outside.txt'), 'secret');
 
@@ -304,14 +304,14 @@ async function main() {
     assert.strictEqual(res.headers['accept-ranges'], 'bytes', 'full responses advertise range support');
   })) passed++; else failed++;
 
-  // A link inside the artifact (cases.html -> case-phynder.html) navigates the
+  // A link inside the artifact (cases.html -> case-study.html) navigates the
   // iframe to a sibling page: it must get the same beacon + SDK as the root, or
   // annotations and the ready signal die on the nested page.
   if (await test('sibling .html pages get the beacon and SDK injected; traversal still 403', async () => {
-    const res = await request(port, 'GET', `/artifact/${htmlKey}/case-phynder.html`);
+    const res = await request(port, 'GET', `/artifact/${htmlKey}/case-study.html`);
     assert.strictEqual(res.statusCode, 200);
     assert.ok(/text\/html/.test(res.headers['content-type']));
-    assert.ok(res.body.includes('<h1>Phynder case</h1>'));
+    assert.ok(res.body.includes('<h1>Case study</h1>'));
     assert.ok(res.body.includes('<script src="/sdk.js"></script>\n</body>'), 'sdk tag before </body>');
     assert.ok(res.body.includes('pc:alive'), 'early beacon present');
     const escape = await request(port, 'GET', `/artifact/${htmlKey}/..%2Feddie-outside.html`);
@@ -518,15 +518,15 @@ async function main() {
     const awaitPromise = request(port, 'GET', `/api/await?file=${encodeURIComponent(htmlArtifact)}`);
     const post = await request(port, 'POST', `/api/session/${htmlKey}/feedback`, {
       body: { items: [
-        { kind: 'annotation', text: 'fix this', anchor: { selector: 'h1', tag: 'h1', snippet: 'Phynder case', page: 'case-phynder.html' } },
-        { kind: 'edit', text: '', edit: { before: 'a', after: 'b' }, anchor: { selector: 'h1', tag: 'text', snippet: 'a', page: 'case-phynder.html' } },
+        { kind: 'annotation', text: 'fix this', anchor: { selector: 'h1', tag: 'h1', snippet: 'Case study', page: 'case-study.html' } },
+        { kind: 'edit', text: '', edit: { before: 'a', after: 'b' }, anchor: { selector: 'h1', tag: 'text', snippet: 'a', page: 'case-study.html' } },
         { kind: 'annotation', text: 'root page', anchor: { selector: 'h1', tag: 'h1', snippet: 'Report' } }
       ] }
     });
     assert.strictEqual(jsonBody(post).accepted, 3);
     const result = jsonBody(await awaitPromise);
-    assert.strictEqual(result.items[0].anchor.page, 'case-phynder.html');
-    assert.strictEqual(result.items[1].anchor.page, 'case-phynder.html');
+    assert.strictEqual(result.items[0].anchor.page, 'case-study.html');
+    assert.strictEqual(result.items[1].anchor.page, 'case-study.html');
     assert.ok(!('page' in result.items[2].anchor), 'root page annotations carry no page field');
     const sdk = await request(port, 'GET', '/sdk.js');
     assert.ok(sdk.body.includes('location.pathname'), 'sdk derives the page from its own URL');
@@ -797,6 +797,11 @@ async function main() {
     const result = jsonBody(await held);
     assert.strictEqual(result.status, 'waiting');
     assert.ok(result.note.includes('shutting down'));
+  })) passed++; else failed++;
+
+  if (await test('ratings journal defaults to ~/.eddie, EDDIE_RATINGS overrides', async () => {
+    assert.strictEqual(resolveRatingsFile({}), path.join(os.homedir(), '.eddie', 'ratings.jsonl'));
+    assert.strictEqual(resolveRatingsFile({ EDDIE_RATINGS: '/x/r.jsonl' }), path.resolve('/x/r.jsonl'));
   })) passed++; else failed++;
 
   fs.rmSync(tmp, { recursive: true, force: true });
