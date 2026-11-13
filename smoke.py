@@ -56,13 +56,15 @@ def no_unfilled_placeholders():
 
 @check
 def npm_test_suite_green():
-    """Реальная регрессионная сетка проекта (tests/run-all.js) — юнит + e2e."""
+    """Быстрая часть сетки (tests/run-all.js --quick): юнит + server, секунды.
+    Тяжёлые e2e и socket-budget (живой Chrome) — только в `verify.py --full`,
+    там verify сам гоняет полный `npm test`. Под нагрузкой они не влезали в 120 с."""
     root = Path(__file__).parent
     result = subprocess.run(
-        ["npm", "test"], cwd=root, capture_output=True, text=True, timeout=120
+        ["node", "tests/run-all.js", "--quick"], cwd=root, capture_output=True, text=True, timeout=120
     )
     assert result.returncode == 0, (
-        f"npm test упал (код {result.returncode}):\n{result.stdout[-2000:]}\n{result.stderr[-2000:]}"
+        f"run-all --quick упал (код {result.returncode}):\n{result.stdout[-2000:]}\n{result.stderr[-2000:]}"
     )
 
 
