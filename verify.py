@@ -165,6 +165,10 @@ def hygiene_checks(root: Path) -> list[Check]:
         bad = [n for n in PLACEHOLDER_FILES if (root / n).exists()
                and "{{PROJECT_" in (root / n).read_text(encoding="utf-8", errors="replace")]
         assert not bad, "незаполненные {{PROJECT_*}} плейсхолдеры в: " + ", ".join(bad)
+        claude = root / "CLAUDE.md"
+        # Пустое «О проекте» = каждая сессия не знает, что за проект, и задаёт общие вопросы (13.11).
+        assert not (claude.exists() and "<!-- 2-3 строки" in claude.read_text(encoding="utf-8", errors="replace")), \
+            "в CLAUDE.md пустая секция «О проекте» (заглушка шаблона) — 3–6 строк: что / для кого / вход → выход / критерий успеха"
 
     return [Check("H", "корень без мусора", fn=root_junk),
             Check("H", "плейсхолдеры стартера заполнены", fn=placeholders)]
@@ -437,6 +441,8 @@ def selftest() -> int:
     # 8. незаполненный плейсхолдер
     case("8. {{PROJECT_NAME}} в CLAUDE.md → FAIL по H",
          make_repo({"CLAUDE.md": "# {{PROJECT_NAME}}\n"}), True, False, ("H",))
+    case("8b. пустое «О проекте» (заглушка шаблона) в CLAUDE.md → FAIL по H",
+         make_repo({"CLAUDE.md": "# x\n## О проекте\n<!-- 2-3 строки: что за проект -->\n"}), True, False, ("H",))
     # 9. делегирование scripts/check.sh в --full
     ran9 = case("9. scripts/check.sh есть → --full делегирует ему",
                 make_repo({"scripts/check.sh": "exit 0\n", "scripts/bad.py": BAD_SCRIPT}), True, True)
