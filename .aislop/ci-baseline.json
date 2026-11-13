@@ -1,0 +1,306 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "lib/markdown.js",
+      "fingerprint": "4facfbc699f3000f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/meta-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "a902be5a6b4bd017",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "17c83284403f3cb7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "1c05a3aae1f9716e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "2d53561c3c0d803b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "4247af9336a32775",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "59dd44e733a84a8a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "7cdc5be4f8324080",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "b36962242e6a73d6",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "c0d5fdbc20673ed7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "c3a973e2a980822b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "c7f780cd318f7dab",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "lib/sdk.js",
+      "fingerprint": "0532d97b3d78bbfe",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "lib/sdk.js",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/server.js",
+      "fingerprint": "576f8a9bd81cbf10",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/server.js",
+      "fingerprint": "7683f49245c74961",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/server.js",
+      "fingerprint": "9668166bc656298f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/server.js",
+      "fingerprint": "aaaf8d7d07207521",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "lib/server.js",
+      "fingerprint": "af0916bd626790db",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "lib/server.js",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "lib/server.js",
+      "fingerprint": "0bc4fa03229ba820",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "lib/server.js",
+      "fingerprint": "dbb4ccbd04bb9263",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "lib/sessions.js",
+      "fingerprint": "e6aca107a0c22521",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/hidden-fallback",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "7c7e34ef455c9301",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "184665747724bc1c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "23172e4b7e5f7a19",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "331cc5ee1c47484d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "4da930400d077351",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "4e22f144bdedcec2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "4f06eed2a4b1d1c5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "5ef4e7adf34bfb32",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "635b77bb401a286a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "6be52f66476687f9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "73c169506a9eff22",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "a761ee5d29ad3fb8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "a7e606eb14a6181c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "b4bd7334b5efe0c2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "e48d69bfd298d15b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "f2944a4b77393512",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "509b893cd3bd2698",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "lib/ui.js",
+      "fingerprint": "0532d97b3d78bbfe",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "lib/ui.js",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "smoke.py",
+      "fingerprint": "48bd0552f3a33e86",
+      "count": 3
+    }
+  ]
+}

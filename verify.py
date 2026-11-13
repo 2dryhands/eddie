@@ -17,6 +17,8 @@ Pre-commit хук гоняет quick; перед «готово» и перед 
   S  скрипты с режимом --selftest → запуск каждого (таймаут VERIFY_TIMEOUT, по умолчанию 180 с)
   T  тесты: pytest (если стоит) или unittest по папкам tests/          [--full]
   N  npm/bun test, если в package.json есть scripts.test               [--full]
+  A  aislop (AI-мусор): красный только на НОВОЙ error-находке, старое — в .aislop/ci-baseline.json [--full]
+     нет aislop на машине → skip; нет baseline → создаётся из текущих находок
   M  smoke.py в корне
 Делегирование: есть scripts/check.sh → --full гоняет его вместо S/T/N;
                есть scripts/quick-test.sh → quick гоняет его вместо S.
@@ -24,7 +26,7 @@ Pre-commit хук гоняет quick; перед «готово» и перед 
 Тяжёлый selftest (полный экспорт и т.п.): `# verify: timeout=900` в файле — свой потолок.
 Python: берётся .venv/bin/python, если есть, иначе тот, которым запущен verify.py;
 компиляция и selftest'ы идут им же (не тем, чем запущен verify.py).
-Исключённые папки: .git .venv venv node_modules data shared _archive .worktrees __pycache__
+Исключённые папки: .git .venv venv node_modules data shared _archive .worktrees .claude __pycache__
 
 Канонический экземпляр — sdlc-starter-kit/_template/verify.py; в проекты раскатывается
 sync-verify.sh. Правки — там, не в копиях.
@@ -43,7 +45,7 @@ import time
 from pathlib import Path
 
 EXCLUDE_DIRS = {".git", ".venv", "venv", "node_modules", "data", "shared", "_archive",
-                ".worktrees", "__pycache__", ".playwright-mcp", "Next-Move-Theory-Canon"}
+                ".worktrees", ".claude", "__pycache__", ".playwright-mcp", "Next-Move-Theory-Canon"}
 JUNK_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bak", ".tmp", ".log"}
 PLACEHOLDER_FILES = ("CLAUDE.md", "README.md", "AGENTS.md", "docs/INDEX.md")
 TIMEOUT = int(os.environ.get("VERIFY_TIMEOUT", "180"))
@@ -56,14 +58,26 @@ def python_exe(root: Path) -> str:
     return str(venv) if venv.exists() else sys.executable
 
 
+def git_ignored(root: Path) -> set[str]:
+    """Пути, которые git игнорирует (папки — со слешем на конце). Это не код проекта:
+    склонированные чужие тулы (tools/OpenMontage), локальные копии — их тесты не наши."""
+    txt = git(root, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory")
+    return {l.strip() for l in (txt or "").splitlines() if l.strip()}
+
+
 def walk_files(root: Path):
+    ignored = git_ignored(root)
     for dirpath, dirnames, filenames in os.walk(root):
+        rel = os.path.relpath(dirpath, root)
+        rel = "" if rel == "." else rel + "/"
         dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDE_DIRS
+                             and rel + d + "/" not in ignored
                              and not (Path(dirpath) / d).is_symlink()
                              # любое виртуальное окружение (.venv-jev, env311…) — чужие библиотеки, не код проекта
                              and not (Path(dirpath) / d / "pyvenv.cfg").exists())
         for f in sorted(filenames):
-            yield Path(dirpath) / f
+            if rel + f not in ignored:
+                yield Path(dirpath) / f
 
 
 def git(root: Path, *args: str) -> str | None:
@@ -216,17 +230,105 @@ def plan(root: Path, full: bool, staged: bool = False) -> list[Check]:
                     runner = "bun" if (root / "bun.lock").exists() or (root / "bun.lockb").exists() else "npm"
                     checks.append(Check("N", f"{runner} test", cmd=[runner, "test"]))
 
+    if full:
+        checks.append(Check("A", "aislop: нет новых error-находок (старые — в baseline)",
+                            fn=lambda: aislop_check(root)))
     if (root / "smoke.py").exists():
         checks.append(Check("M", "smoke.py", cmd=[py, "smoke.py"]))
     return checks
+
+
+# ───────────────────────── aislop (только --full) ─────────────────────────
+# Детектор AI-мусора (github.com/scanaislop/aislop). Красный — только НОВАЯ находка уровня error
+# (проглоченное исключение, секрет в коде, eval…) в движках ниже. Старые лежат в baseline
+# .aislop/ci-baseline.json (формат и отпечатки — как у самого aislop: правило+файл+sha строки),
+# новые warning печатаются, но не роняют. Нет baseline — создаётся из текущих находок (закоммить).
+# format/lint не берём: зависят от того, что стоит на машине (ruff есть/нет) — гейт плавал бы.
+# Заглушить находку: `# aislop-ignore-line <правило> -- причина`. Принять разом: удали baseline.
+AISLOP_ENGINES = {"ai-slop", "code-quality", "security", "architecture"}
+AISLOP_BASELINE = ".aislop/ci-baseline.json"
+AISLOP_TIMEOUT = 300  # свой потолок: phynder (660 файлов) — 16 с; от VERIFY_TIMEOUT не зависит
+AISLOP_ENV = {"AISLOP_NO_TELEMETRY": "1", "DO_NOT_TRACK": "1", "AISLOP_NO_UPDATE_NOTIFIER": "1",
+              "AISLOP_NO_HISTORY": "1"}
+
+
+def aislop_findings(root: Path) -> list[dict] | None:
+    """Находки aislop с ключом baseline. None — aislop не установлен."""
+    import shutil, hashlib
+    exe = shutil.which("aislop")
+    if not exe:
+        return None
+    # сам гейт — раскатанная копия, не код проекта: его правки в каноне не должны давать «новые» находки
+    excl = ",".join([f"**/{d}/**" for d in sorted(EXCLUDE_DIRS)] + ["verify.py"])
+    r = subprocess.run([exe, "scan", ".", "--json", "--exclude", excl], cwd=str(root), capture_output=True,
+                       text=True, timeout=AISLOP_TIMEOUT, env={**os.environ, **AISLOP_ENV})
+    try:
+        diags = json.loads(r.stdout)["diagnostics"]
+    except (ValueError, KeyError, TypeError):
+        raise AssertionError("aislop не отдал JSON: " + (r.stderr or r.stdout).strip()[-300:])
+    fp = lambda s: hashlib.sha256(re.sub(r"\s+", " ", s.strip()).encode()).hexdigest()[:16]
+    lines: dict[str, list[str]] = {}
+    out = []
+    for d in diags:
+        if d.get("engine") not in AISLOP_ENGINES or d.get("severity") == "info":
+            continue
+        f, n = d["filePath"], d.get("line") or 0
+        if n > 0:
+            if f not in lines:
+                try:
+                    lines[f] = re.split(r"\r?\n", (root / f).read_text(encoding="utf-8", errors="replace"))
+                except OSError:
+                    lines[f] = []
+            src = lines[f][n - 1] if n <= len(lines[f]) else ""
+            d["_key"] = (d["rule"], f, fp(src))
+        else:
+            d["_key"] = (d["rule"], f, "message:" + fp(d.get("message", "")))
+        out.append(d)
+    return out
+
+
+def aislop_check(root: Path) -> str:
+    from collections import Counter
+    found = aislop_findings(root)
+    if found is None:
+        return "aislop не установлен — skip (npm install -g aislop)"
+    base_path = root / AISLOP_BASELINE
+    if not base_path.exists():
+        cnt = Counter(d["_key"] for d in found)
+        base_path.parent.mkdir(parents=True, exist_ok=True)
+        engine = {d["_key"]: d["engine"] for d in found}
+        entries = [{"rule": k[0], "engine": engine[k], "file": k[1], "fingerprint": k[2], "count": c}
+                   for k, c in sorted(cnt.items(), key=lambda kv: (kv[0][1], kv[0][0], kv[0][2]))]
+        base_path.write_text(json.dumps({"version": 1, "entries": entries}, indent=2, ensure_ascii=False) + "\n",
+                             encoding="utf-8")
+        return f"baseline создан: {len(found)} находок приняты как старые → закоммить {AISLOP_BASELINE}"
+    try:
+        left = Counter()
+        for e in json.loads(base_path.read_text(encoding="utf-8"))["entries"]:
+            left[(e["rule"], e["file"], e["fingerprint"])] += e["count"]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise AssertionError(f"битый {AISLOP_BASELINE}: {e} — удали его, пересоздастся")
+    new = []
+    for d in found:
+        if left[d["_key"]] > 0:
+            left[d["_key"]] -= 1
+        else:
+            new.append(d)
+    fmt = lambda d: f"{d['filePath']}:{d.get('line', 0)} {d['rule']} — {d.get('message', '')[:90]}"
+    errors = [d for d in new if d.get("severity") == "error"]
+    warns = [d for d in new if d.get("severity") != "error"]
+    assert not errors, (f"новых error-находок {len(errors)} (заглуши `# aislop-ignore-line <правило> -- причина`"
+                        " или почини):\n" + "\n".join(map(fmt, errors[:10])))
+    note = f"{len(found)} находок, новых error 0, новых warning {len(warns)}"
+    return note + "".join("\n⚠ " + fmt(d) for d in warns[:5])
 
 
 def run_check(root: Path, c: Check) -> tuple[bool, float, str]:
     t0 = time.time()
     if c.fn:
         try:
-            c.fn()
-            return True, time.time() - t0, ""
+            note = c.fn()  # fn может вернуть строку-пометку (skip, предупреждения) — печатается под ✅
+            return True, time.time() - t0, note if isinstance(note, str) else ""
         except Exception as e:  # noqa: BLE001 — любое падение = красный
             return False, time.time() - t0, str(e)
     env = {**os.environ, "VERIFY": "1", "PYTHONDONTWRITEBYTECODE": "1"}
@@ -259,7 +361,7 @@ def run(root: Path, full: bool, list_only: bool = False, quiet: bool = False,
         ok, sec, tail = run_check(root, c)
         results.append((c, ok, sec, tail))
         say(f"  {'✅' if ok else '❌'} {c.code}  {c.name}  {sec:.1f}s")
-        if not ok and tail:
+        if tail and (not ok or c.fn):
             say("       " + tail.replace("\n", "\n       "))
     failed = [r for r in results if not r[1]]
     total = time.time() - t0
@@ -382,6 +484,45 @@ def selftest() -> int:
     if not any("⏭" in c.name for c, *_ in res13):
         probs.append("нет пометки ⏭ о пропуске")
     cases.append(("13. --staged пропускает тяжёлый selftest (# verify: timeout выше потолка)", probs, set()))
+    # 14. gitignored-папка с красными тестами/selftest'ами (склонированный чужой тул) — не наш код
+    r14 = make_repo({".gitignore": "tools/\n", "scripts/ok.py": OK_SCRIPT,
+                     "tools/vendor/scripts/bad.py": BAD_SCRIPT,
+                     "tools/vendor/tests/test_x.py": "import nonexistent_mod_xyz\n"})
+    ran14 = case("14. gitignored tools/ с красным selftest и тестами → PASS, не запускаются", r14, True, True)
+    if any("tools/" in n or "pytest" in n or "unittest" in n for n in ran14):
+        cases[-1][1].append("гейт полез в gitignored tools/")
+
+    # 15. aislop не установлен → skip, не красный
+    r15 = make_repo({"scripts/ok.py": OK_SCRIPT}, commit=False)
+    saved_path = os.environ.get("PATH", "")
+    os.environ["PATH"] = "/nonexistent"
+    try:
+        note15 = aislop_check(r15)
+    finally:
+        os.environ["PATH"] = saved_path
+    cases.append(("15. aislop не установлен → skip с пометкой", [] if "skip" in note15 else [f"ждал skip: {note15}"],
+                  set()))
+    # 16. aislop: baseline глотает старое (и сдвиг строк), новая проглоченная ошибка → красный
+    import shutil
+    if shutil.which("aislop"):
+        SWALLOW = "import json\n\n\ndef load(p):\n    try:\n        return json.load(open(p))\n    except Exception:\n        pass\n"
+        r16 = make_repo({"scripts/old.py": SWALLOW, "scripts/ok.py": "def add(a, b):\n    return a + b\n"})
+        probs = []
+        if "baseline создан" not in aislop_check(r16):
+            probs.append("первый прогон не создал baseline")
+        (r16 / "scripts" / "old.py").write_text("\n\n# сдвиг\n" + SWALLOW, encoding="utf-8")
+        try:
+            aislop_check(r16)
+        except AssertionError as e:
+            probs.append(f"старая находка после сдвига строк стала новой: {e}")
+        (r16 / "scripts" / "new.py").write_text(SWALLOW.replace("load", "read"), encoding="utf-8")
+        try:
+            aislop_check(r16)
+            probs.append("новое проглоченное исключение не дало красный")
+        except AssertionError as e:
+            if "swallowed-exception" not in str(e):
+                probs.append(f"красный не по той причине: {e}")
+        cases.append(("16. aislop: старое в baseline (и со сдвигом) → PASS, новое swallowed → FAIL", probs, set()))
 
     print(f"Selftest verify.py ({len(cases)} сценариев):")
     failures = 0
