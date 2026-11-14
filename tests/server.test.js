@@ -418,7 +418,11 @@ async function main() {
     const { port: logPort } = await logged.listen(0);
     try {
       const opened = jsonBody(await request(logPort, 'POST', '/api/sessions', { body: { file: htmlArtifact } }));
-      await request(logPort, 'GET', `/artifact/${opened.key}/`);
+      const restarted = await request(logPort, 'GET', `/artifact/${opened.key}/`);
+      // Same file, same version, another server run: a fix shipped without a
+      // version bump must not hide behind the browser's cached copy (304).
+      const main = await request(port, 'GET', `/artifact/${htmlKey}/`);
+      assert.notStrictEqual(restarted.headers.etag, main.headers.etag, 'a new server run must not reuse ETags');
       assert.ok(
         lines.some(l => l.includes('/artifact/') && l.includes(opened.key)),
         `expected an artifact access line, got: ${JSON.stringify(lines)}`
