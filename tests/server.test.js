@@ -314,6 +314,7 @@ async function main() {
     assert.ok(res.body.includes('<h1>Case study</h1>'));
     assert.ok(res.body.includes('<script src="/sdk.js"></script>\n</body>'), 'sdk tag before </body>');
     assert.ok(res.body.includes('pc:alive'), 'early beacon present');
+    assert.ok(/^\s*(<!doctype[^>]*>)?<script>\(\(\)=>\{const ok=n=>/i.test(res.body), 'storage stand-in comes before any script of the page');
     const escape = await request(port, 'GET', `/artifact/${htmlKey}/..%2Feddie-outside.html`);
     assert.strictEqual(escape.statusCode, 403, 'html outside the artifact dir stays forbidden');
     const css = await request(port, 'GET', `/artifact/${htmlKey}/style.css`);

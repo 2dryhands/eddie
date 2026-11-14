@@ -20,6 +20,9 @@
  *   7  a hostile page can't flood the chrome's storage through pc:draft
  *   8  two cards copied with the same field id keep separate drafts
  *   9  a form cleared with form.reset() after sending forgets the draft
+ *  10  a page whose script touches localStorage/sessionStorage first thing
+ *      still runs: the sandbox throws on that, and the page's buttons were
+ *      left dead (2026-11-14, dedup-golden labeling page)
  *
  * Run with: node tests/drafts.test.js
  */
@@ -255,6 +258,17 @@ async function main() {
       rebuild([], form);
       await waitBuild(build);
       assert.deepStrictEqual(await values(), [''], 'a reset form got its sent text back');
+    });
+
+    await test('10: a page that reads localStorage in <head> still runs and its buttons work', async () => {
+      const head = `<script>const st = JSON.parse(localStorage.getItem('k') || '{}'); sessionStorage.setItem('s', '1');
+        window.clicks = 0;</script>`;
+      fs.writeFileSync(file, `<!DOCTYPE html><html><head>${head}</head><body><h1>build ${++build}</h1>` +
+        `<button id="b" onclick="localStorage.setItem('k', String(++clicks))">go</button></body></html>`);
+      await waitBuild(build);
+      assert.strictEqual(await inFrame("typeof st"), 'object', 'the head script died on localStorage');
+      await inFrame("document.getElementById('b').click(), document.getElementById('b').click(), true");
+      assert.strictEqual(await inFrame("localStorage.getItem('k') + '/' + sessionStorage.getItem('s') + '/' + localStorage.length"), '2/1/1');
     });
   } finally {
     const exited = child.exitCode !== null || child.signalCode !== null
