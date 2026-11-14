@@ -315,6 +315,14 @@ async function main() {
     assert.ok(res.body.includes('<script src="/sdk.js"></script>\n</body>'), 'sdk tag before </body>');
     assert.ok(res.body.includes('pc:alive'), 'early beacon present');
     assert.ok(/^\s*(<!doctype[^>]*>)?<script>\(\(\)=>\{const ok=n=>/i.test(res.body), 'storage stand-in comes before any script of the page');
+    for (const pre of ['<!-- generated -->\n', '<?xml version="1.0"?>']) {
+      const out = require('../lib/server').injectSdk(`${pre}<!DOCTYPE html><html><head><script>x()</script></head><body></body></html>`);
+      assert.ok(out.startsWith(`${pre}<!DOCTYPE html><script>(()=>{const ok=`), `stand-in must stay after the doctype behind ${JSON.stringify(pre)}`);
+    }
+    const t0 = Date.now(); // a run of comments once backtracked for minutes
+    require('../lib/server').injectSdk('<!--a-->\n<html><body>' + '<!--b-->'.repeat(2000) + '</body></html>');
+    require('../lib/server').injectSdk('<!--a-->'.repeat(2000) + '<p>no doctype</p>');
+    assert.ok(Date.now() - t0 < 500, `injectSdk took ${Date.now() - t0}ms on comment runs`);
     const escape = await request(port, 'GET', `/artifact/${htmlKey}/..%2Feddie-outside.html`);
     assert.strictEqual(escape.statusCode, 403, 'html outside the artifact dir stays forbidden');
     const css = await request(port, 'GET', `/artifact/${htmlKey}/style.css`);
