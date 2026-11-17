@@ -701,12 +701,40 @@ async function main() {
     assert.strictEqual(reopened.statusCode, 200);
   })) passed++; else failed++;
 
-  if (await test('feedback on an ended session is refused with 409', async () => {
+  if (await test('feedback on an agent-ended page reopens it and reaches await', async () => {
     await request(port, 'POST', `/api/end`, { body: { file: htmlArtifact } });
+    const ended = await request(port, 'GET', `/api/await?file=${encodeURIComponent(htmlArtifact)}&timeoutMs=0`);
+    assert.strictEqual(jsonBody(ended).status, 'ended', 'the closing agent still hears ended');
     const res = await request(port, 'POST', `/api/session/${htmlKey}/feedback`, {
-      body: { items: [{ kind: 'chat', text: 'too late' }] }
+      body: { items: [{ kind: 'annotation', text: 'not too late', anchor: { selector: 'h1' } }] }
+    });
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(jsonBody(res).reopened, true);
+    const listed = jsonBody(await request(port, 'GET', '/api/sessions')).sessions.find(s => s.key === htmlKey);
+    assert.notStrictEqual(listed.status, 'ended');
+    assert.strictEqual(listed.pending, 1);
+    const taken = jsonBody(await request(port, 'GET', `/api/await?file=${encodeURIComponent(htmlArtifact)}&timeoutMs=0`));
+    assert.strictEqual(taken.status, 'feedback');
+    assert.strictEqual(taken.items[0].text, 'not too late');
+    assert.strictEqual(taken.sessionEnded, undefined);
+  })) passed++; else failed++;
+
+  if (await test('feedback on a user-ended page is refused with a reopen hint; reopen lets it through', async () => {
+    await request(port, 'POST', `/api/session/${htmlKey}/end`);
+    const res = await request(port, 'POST', `/api/session/${htmlKey}/feedback`, {
+      body: { items: [{ kind: 'chat', text: 'after hand-off' }] }
     });
     assert.strictEqual(res.statusCode, 409);
+    assert.strictEqual(jsonBody(res).status, 'user-ended');
+    const reopen = await request(port, 'POST', `/api/session/${htmlKey}/reopen`);
+    assert.strictEqual(reopen.statusCode, 200);
+    assert.strictEqual(jsonBody(reopen).status, 'open');
+    const retry = await request(port, 'POST', `/api/session/${htmlKey}/feedback`, {
+      body: { items: [{ kind: 'chat', text: 'after hand-off' }] }
+    });
+    assert.strictEqual(retry.statusCode, 200);
+    const taken = jsonBody(await request(port, 'GET', `/api/await?file=${encodeURIComponent(htmlArtifact)}&timeoutMs=0`));
+    assert.strictEqual(taken.items[0].text, 'after hand-off');
   })) passed++; else failed++;
 
   if (await test('GET / lists sessions in the Eddie shell', async () => {

@@ -201,12 +201,32 @@ function runTests() {
     assert.strictEqual(after.endedBy, 'user');
   })) passed++; else failed++;
 
-  if (test('queueFeedback on an ended session is refused', () => {
+  if (test('queueFeedback on an agent-ended session reopens it and keeps the note', () => {
     const fx = makeFixture();
     fixtures.push(fx);
     const { session } = fx.store.open(fx.artifact);
     fx.store.end(session.key, 'agent');
+    const result = fx.store.queueFeedback(session.key, [{ kind: 'chat', text: 'late' }]);
+    assert.ok(result, 'accepted');
+    assert.strictEqual(result.reopened, true);
+    const after = fx.store.get(session.key);
+    assert.notStrictEqual(after.status, 'ended');
+    assert.strictEqual(after.endedBy, undefined);
+    assert.strictEqual(after.pendingFeedback[0].text, 'late');
+    const taken = fx.store.takeFeedback(session.key);
+    assert.strictEqual(taken.status, 'feedback');
+    assert.strictEqual(taken.items[0].text, 'late');
+    assert.strictEqual(taken.sessionEnded, undefined);
+    assert.strictEqual(fx.store.get(session.key).status, 'open');
+  })) passed++; else failed++;
+
+  if (test('queueFeedback on a user-ended session is refused', () => {
+    const fx = makeFixture();
+    fixtures.push(fx);
+    const { session } = fx.store.open(fx.artifact);
+    fx.store.end(session.key, 'user');
     assert.strictEqual(fx.store.queueFeedback(session.key, [{ kind: 'chat', text: 'late' }]), null);
+    assert.strictEqual(fx.store.get(session.key).pendingFeedback.length, 0);
   })) passed++; else failed++;
 
   console.log('\nPersistence:');

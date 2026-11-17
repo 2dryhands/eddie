@@ -187,6 +187,9 @@ These apply to every artifact you open in Eddie, on every revision:
   polling, deliver any remaining updates in chat, and do not reopen. A plain
   `open` on that session is refused; pass `--reopen` only when the human
   explicitly asks to resume.
+- After *you* `end` a session, the human's tab stays usable: a note they send
+  there reopens the page and waits for the next `await` (or whoever picks the
+  page up). The closing agent's own `await` still gets `ended`.
 - Sibling assets (images, CSS) must sit next to the artifact and be
   referenced by a relative path confined to the artifact's directory.
 - The server is loopback-only (`127.0.0.1`, host-header gated against DNS
