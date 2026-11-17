@@ -50,6 +50,10 @@ eddie await plan.md
 Add `open --no-open` when driving Eddie headless (automated tests, CI, or a
 scripted verification pass) to skip launching a real browser window.
 
+Re-running `open` on a page that a browser tab already shows does not launch a
+duplicate: it reports `"browser": "already open"` and, on macOS with Chrome,
+brings that tab to the front. Pass `--new-tab` to launch one anyway.
+
 `await` prints JSON when the human acts:
 
 ```json

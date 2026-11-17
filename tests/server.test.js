@@ -205,6 +205,24 @@ async function main() {
     assert.strictEqual(res.statusCode, 404);
   })) passed++; else failed++;
 
+  // The duplicate-tab guard: `open` must know whether a tab already shows this
+  // page. A visible tab holds a stream; a background tab is parked (no stream)
+  // and only pings — both count. A closed tab says goodbye and stops counting.
+  if (await test('POST /api/sessions reports liveTab: stream or parked ping counts, a closed tab does not', async () => {
+    const live = async () => jsonBody(await request(port, 'POST', '/api/sessions', { body: { file: artifact } })).liveTab;
+    assert.strictEqual(await live(), false, 'no tab yet');
+    const sse = openSse(port, key);
+    await sse.ready;
+    assert.strictEqual(await live(), true, 'visible tab with a stream');
+    sse.close();
+    await waitFor(() => canvas.presenceFor(key) && !canvas.hasLiveTab(key));
+    assert.strictEqual(await live(), false, 'stream dropped, no ping');
+    assert.strictEqual((await request(port, 'GET', `/health?tab=${key}`)).statusCode, 200);
+    assert.strictEqual(await live(), true, 'parked tab pinging');
+    assert.strictEqual((await request(port, 'POST', `/api/session/${key}/gone`)).statusCode, 200);
+    assert.strictEqual(await live(), false, 'tab closed');
+  })) passed++; else failed++;
+
   if (await test('GET /canvas/:key serves the Eddie chrome with CSP', async () => {
     const res = await request(port, 'GET', `/canvas/${key}`);
     assert.strictEqual(res.statusCode, 200);
@@ -850,6 +868,37 @@ async function main() {
   if (await test('ratings journal defaults to ~/.eddie, EDDIE_RATINGS overrides', async () => {
     assert.strictEqual(resolveRatingsFile({}), path.join(os.homedir(), '.eddie', 'ratings.jsonl'));
     assert.strictEqual(resolveRatingsFile({ EDDIE_RATINGS: '/x/r.jsonl' }), path.resolve('/x/r.jsonl'));
+  })) passed++; else failed++;
+
+  // Handoff criterion: `open` twice on one page with its tab connected launches
+  // the browser once; the second open fronts the existing tab instead.
+  if (await test('CLI open launches the browser once while the tab is live; --new-tab and a dead tab launch again', async () => {
+    const { cmdOpen } = require('../eddie');
+    const cliStore = createSessionStore({ stateDir: path.join(tmp, 'cli-state') });
+    const real = createPlanCanvasServer({ store: cliStore, version: require('../package.json').version, idleTimeoutMs: 0 });
+    const ctx = { stateDir: path.join(tmp, 'cli-state'), port: (await real.listen(0)).port };
+    const launched = [];
+    const focused = [];
+    const browser = { launch: url => launched.push(url) > 0, focus: url => focused.push(url) > 0 };
+    try {
+      const first = await cmdOpen(artifact, [], ctx, browser);
+      assert.strictEqual(first.browser, 'opened');
+      const sse = openSse(ctx.port, first.url.split('/').pop());
+      await sse.ready;
+      const second = await cmdOpen(artifact, [], ctx, browser);
+      assert.strictEqual(launched.length, 1, 'second open must not launch a new tab');
+      assert.strictEqual(second.browser, 'already open');
+      assert.deepStrictEqual(focused, [first.url]);
+      await cmdOpen(artifact, ['--new-tab'], ctx, browser);
+      assert.strictEqual(launched.length, 2, '--new-tab forces a launch');
+      assert.strictEqual((await cmdOpen(artifact, ['--no-open'], ctx, browser)).browser, 'not opened');
+      sse.close();
+      await waitFor(() => !real.hasLiveTab(first.url.split('/').pop()));
+      await cmdOpen(artifact, [], ctx, browser);
+      assert.strictEqual(launched.length, 3, 'tab gone → launch as before');
+    } finally {
+      await real.close();
+    }
   })) passed++; else failed++;
 
   fs.rmSync(tmp, { recursive: true, force: true });

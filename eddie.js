@@ -53,6 +53,7 @@ function usage() {
     'Options:',
     '  open:  --no-open      Do not launch a browser window',
     '         --reopen       Reopen a session the user ended from the browser',
+    '         --new-tab      Launch a new tab even if one already shows the page',
     '  await: --reply <msg>  Show an agent reply in the canvas chat before waiting',
     '         --resolve <id>:<status>:<note>   Mark a task done|answered|declined (repeatable)',
     '         --timeout-ms <n>  Return {status:"waiting"} after n ms (tests/debug only)',
@@ -183,6 +184,35 @@ function openBrowser(url) {
   }
 }
 
+// A tab already shows this page: bring it to the front instead of launching a
+// duplicate (macOS + Chrome only — elsewhere the tab stays where it is). Never
+// starts Chrome, never blocks: no Automation permission just means no focus.
+function focusTab(url) {
+  if (process.platform !== 'darwin' || !fs.existsSync(CHROME_APP_PATH)) return false;
+  const script = `if application "Google Chrome" is running then
+  tell application "Google Chrome"
+    repeat with w in windows
+      set i to 0
+      repeat with t in tabs of w
+        set i to i + 1
+        if URL of t starts with "${url}" then
+          set active tab index of w to i
+          set index of w to 1
+          activate
+          return
+        end if
+      end repeat
+    end repeat
+  end tell
+end if`;
+  try {
+    spawn('osascript', ['-e', script], { detached: true, stdio: 'ignore' }).unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function output(payload) {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
@@ -196,7 +226,7 @@ async function cmdStatus({ stateDir, port }) {
   return { server: `http://${DEFAULT_HOST}:${port}`, version: health.version, sessions: sessions.body.sessions };
 }
 
-async function cmdOpen(file, args, { stateDir, port }) {
+async function cmdOpen(file, args, { stateDir, port }, browser = { launch: openBrowser, focus: focusTab }) {
   if (!file) throw new Error('open requires a file path');
   if (!fs.existsSync(path.resolve(file))) throw new Error(`artifact not found: ${file}`);
   await ensureServer({ stateDir, port });
@@ -207,11 +237,14 @@ async function cmdOpen(file, args, { stateDir, port }) {
   if (res.statusCode === 409) return res.body;
   if (res.statusCode !== 200) throw new Error(res.body.error || `open failed (HTTP ${res.statusCode})`);
   const url = `http://${DEFAULT_HOST}:${port}${res.body.url}`;
-  const launched = args.includes('--no-open') ? false : openBrowser(url);
+  const noOpen = args.includes('--no-open');
+  const reuse = !noOpen && res.body.liveTab && !args.includes('--new-tab');
+  if (reuse) browser.focus(url);
+  const launched = noOpen || reuse ? false : browser.launch(url);
   return {
     status: 'open',
     url,
-    browser: launched ? 'opened' : 'not opened',
+    browser: reuse ? 'already open' : launched ? 'opened' : 'not opened',
     ...(res.body.note ? { note: res.body.note } : {}),
     next_step:
       'Run `eddie await <file>` and leave it running; it returns when the human sends feedback, a verdict, or ends the session.'
@@ -391,4 +424,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main, ensureServer, healthCheck, parseResolveArgs };
+module.exports = { main, cmdOpen, ensureServer, healthCheck, parseResolveArgs };
