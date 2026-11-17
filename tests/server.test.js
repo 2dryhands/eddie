@@ -524,6 +524,13 @@ async function main() {
 
     await waitFor(() => sse.received.some(e => e.event === 'presence' && e.data.state === 'working'));
     await waitFor(() => sse.received.some(e => e.event === 'chat-sync' && e.data.chat.length === 2));
+
+    // A one-shot handler (launchd, timeoutMs=0) never long-polls again: closing the last task must end "working",
+    // or the page says "agent thinking…" forever (17.11, stray-notes page).
+    const res = await request(port, 'POST', `/api/session/${key}/resolve`,
+      { body: { resolutions: [{ id: result.items[0].id, status: 'done' }] } });
+    assert.strictEqual(jsonBody(res).updated, 1);
+    await waitFor(() => sse.received.filter(e => e.event === 'presence').pop().data.state === 'waiting');
     sse.close();
   })) passed++; else failed++;
 
