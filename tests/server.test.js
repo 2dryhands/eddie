@@ -160,6 +160,7 @@ async function main() {
     version: '9.9.9-test',
     heartbeatMs: 25,
     idleTimeoutMs: 0,
+    staleNoteMs: 300,
     onIdleShutdown: () => {
       idleFired = true;
     }
@@ -549,6 +550,25 @@ async function main() {
       { body: { resolutions: [{ id: result.items[0].id, status: 'done' }] } });
     assert.strictEqual(jsonBody(res).updated, 1);
     await waitFor(() => sse.received.filter(e => e.event === 'presence').pop().data.state === 'waiting');
+    sse.close();
+  })) passed++; else failed++;
+
+  if (await test('agent took notes and vanished: new untaken notes turn "thinking" into "not connected"', async () => {
+    // 16.11, post-editor page: chip said "agent thinking…", the agent was long gone, fresh notes sat 10 minutes
+    await request(port, 'POST', `/api/session/${key}/feedback`, { body: { items: [{ kind: 'chat', text: 'one' }] } });
+    // one-shot taker that never comes back and never resolves
+    const ones = await request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}&timeoutMs=0`);
+    assert.strictEqual(jsonBody(ones).status, 'feedback');
+    assert.strictEqual(canvas.presenceFor(key), 'working');
+    const sse = openSse(port, key);
+    await sse.ready;
+    await request(port, 'POST', `/api/session/${key}/feedback`, { body: { items: [{ kind: 'chat', text: 'two' }] } });
+    assert.strictEqual(canvas.presenceFor(key), 'working'); // fresh note: the agent may still pick it up
+    await waitFor(() => sse.received.filter(e => e.event === 'presence').pop()?.data.state === 'waiting');
+    assert.strictEqual(canvas.presenceFor(key), 'waiting');
+    const back = jsonBody(await request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}&timeoutMs=0`));
+    assert.strictEqual(back.status, 'feedback'); // the agent came back after all: it's working again
+    assert.strictEqual(canvas.presenceFor(key), 'working');
     sse.close();
   })) passed++; else failed++;
 
