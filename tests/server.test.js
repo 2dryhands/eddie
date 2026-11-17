@@ -872,7 +872,7 @@ async function main() {
 
   // Handoff criterion: `open` twice on one page with its tab connected launches
   // the browser once; the second open fronts the existing tab instead.
-  if (await test('CLI open launches the browser once while the tab is live; --new-tab and a dead tab launch again', async () => {
+  if (await test('CLI open launches the browser once while the tab is live; --new-tab, --reopen, a failed focus and a dead tab launch again', async () => {
     const { cmdOpen } = require('../eddie');
     const cliStore = createSessionStore({ stateDir: path.join(tmp, 'cli-state') });
     const real = createPlanCanvasServer({ store: cliStore, version: require('../package.json').version, idleTimeoutMs: 0 });
@@ -891,11 +891,16 @@ async function main() {
       assert.deepStrictEqual(focused, [first.url]);
       await cmdOpen(artifact, ['--new-tab'], ctx, browser);
       assert.strictEqual(launched.length, 2, '--new-tab forces a launch');
+      await cmdOpen(artifact, ['--reopen'], ctx, browser);
+      assert.strictEqual(launched.length, 3, '--reopen keeps launching');
+      const missed = await cmdOpen(artifact, [], ctx, { ...browser, focus: () => false });
+      assert.strictEqual(missed.browser, 'opened', 'browser could not front the tab → launch, never silence');
+      assert.strictEqual(launched.length, 4);
       assert.strictEqual((await cmdOpen(artifact, ['--no-open'], ctx, browser)).browser, 'not opened');
       sse.close();
       await waitFor(() => !real.hasLiveTab(first.url.split('/').pop()));
       await cmdOpen(artifact, [], ctx, browser);
-      assert.strictEqual(launched.length, 3, 'tab gone → launch as before');
+      assert.strictEqual(launched.length, 5, 'tab gone → launch as before');
     } finally {
       await real.close();
     }

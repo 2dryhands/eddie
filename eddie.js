@@ -20,7 +20,7 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const {
   canonicalizeArtifactPath,
@@ -184,11 +184,12 @@ function openBrowser(url) {
   }
 }
 
-// A tab already shows this page: bring it to the front instead of launching a
-// duplicate (macOS + Chrome only — elsewhere the tab stays where it is). Never
-// starts Chrome, never blocks: no Automation permission just means no focus.
+// The server thinks a tab shows this page: bring it to the front instead of
+// launching a duplicate. True = fronted (or no way to check off macOS+Chrome:
+// trust the server); false = Chrome has no such tab, no Automation permission,
+// or it hung — the caller launches a fresh tab, so nobody is left staring at nothing.
 function focusTab(url) {
-  if (process.platform !== 'darwin' || !fs.existsSync(CHROME_APP_PATH)) return false;
+  if (process.platform !== 'darwin' || !fs.existsSync(CHROME_APP_PATH)) return true;
   const script = `if application "Google Chrome" is running then
   tell application "Google Chrome"
     repeat with w in windows
@@ -197,20 +198,18 @@ function focusTab(url) {
         set i to i + 1
         if URL of t starts with "${url}" then
           set active tab index of w to i
+          set minimized of w to false
           set index of w to 1
           activate
-          return
+          return "found"
         end if
       end repeat
     end repeat
   end tell
-end if`;
-  try {
-    spawn('osascript', ['-e', script], { detached: true, stdio: 'ignore' }).unref();
-    return true;
-  } catch {
-    return false;
-  }
+end if
+return "missing"`;
+  const res = spawnSync('osascript', ['-e', script], { encoding: 'utf8', timeout: 3000 });
+  return res.status === 0 && res.stdout.trim() === 'found';
 }
 
 function output(payload) {
@@ -238,8 +237,9 @@ async function cmdOpen(file, args, { stateDir, port }, browser = { launch: openB
   if (res.statusCode !== 200) throw new Error(res.body.error || `open failed (HTTP ${res.statusCode})`);
   const url = `http://${DEFAULT_HOST}:${port}${res.body.url}`;
   const noOpen = args.includes('--no-open');
-  const reuse = !noOpen && res.body.liveTab && !args.includes('--new-tab');
-  if (reuse) browser.focus(url);
+  // --reopen keeps launching: the old tab still wears the "handed off" overlay.
+  const reuse = !noOpen && res.body.liveTab && !args.includes('--new-tab') && !args.includes('--reopen')
+    && browser.focus(url);
   const launched = noOpen || reuse ? false : browser.launch(url);
   return {
     status: 'open',
