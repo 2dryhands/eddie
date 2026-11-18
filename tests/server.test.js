@@ -565,6 +565,17 @@ async function main() {
     assert.strictEqual(solo.presenceFor(key), 'waiting'); // no pulse for 10 min: courier is down, say so
   })) passed++; else failed++;
 
+  if (await test('note trail: presence carries the count of untaken notes, taking them zeroes it', async () => {
+    // 18.11, Gosha: "don't post 'seen it, will carry' in chat — a status bar": the strip reads this count
+    const solo = createPlanCanvasServer({ store, version: '9.9.9-test', idleTimeoutMs: 0 });
+    store.takeFeedback(key);
+    assert.strictEqual(solo.presencePayload(key).pending, 0);
+    store.queueFeedback(key, [{ kind: 'chat', text: 'trail' }]);
+    assert.strictEqual(solo.presencePayload(key).pending, 1);
+    store.takeFeedback(key);
+    assert.strictEqual(solo.presencePayload(key).pending, 0);
+  })) passed++; else failed++;
+
   if (await test('agent took notes and vanished: new untaken notes turn "thinking" into "not connected"', async () => {
     // 16.11, post-editor page: chip said "agent thinking…", the agent was long gone, fresh notes sat 10 minutes
     await request(port, 'POST', `/api/session/${key}/feedback`, { body: { items: [{ kind: 'chat', text: 'one' }] } });
