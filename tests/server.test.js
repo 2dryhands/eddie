@@ -182,6 +182,33 @@ async function main() {
     assert.ok(Number.isInteger(body.streamBudget) && body.streamBudget > 0, 'streamBudget is a positive integer');
   })) passed++; else failed++;
 
+  // A page that declares itself an app (<meta name="eddie:app">) gets a web app
+  // manifest: Chrome installs it as its own window with its own Dock / Cmd+Tab icon.
+  if (await test('eddie:app page serves a manifest with its own icons; a plain page has none', async () => {
+    const appFile = path.join(tmp, 'pult-app.html');
+    fs.writeFileSync(appFile, '<!DOCTYPE html><html><head><meta name="eddie:app" content="Пульт &amp; co">'
+      + '<meta name="eddie:app-icon" content="icon.png"><meta name="eddie:app-icon-maskable" content="icon-m.png">'
+      + '</head><body>x</body></html>');
+    const k = jsonBody(await request(port, 'POST', '/api/sessions', { body: { file: appFile } })).key;
+    const page = (await request(port, 'GET', `/canvas/${k}`)).body;
+    assert.ok(page.includes(`<link rel="manifest" href="/manifest/${k}.webmanifest">`), 'manifest link');
+    assert.ok(page.includes(`<link rel="icon" href="/artifact/${k}/icon.png">`), 'own favicon');
+    const res = await request(port, 'GET', `/manifest/${k}.webmanifest`);
+    assert.strictEqual(res.statusCode, 200);
+    assert.match(res.headers['content-type'], /manifest\+json/);
+    const m = jsonBody(res);
+    assert.strictEqual(m.name, 'Пульт & co');
+    assert.strictEqual(m.start_url, `/canvas/${k}`);
+    assert.strictEqual(m.id, `/canvas/${k}`);
+    assert.strictEqual(m.display, 'standalone');
+    assert.deepStrictEqual(m.icons.map(i => [i.src, i.purpose]),
+      [[`/artifact/${k}/icon.png`, 'any'], [`/artifact/${k}/icon-m.png`, 'maskable']]);
+
+    const plainKey = jsonBody(await request(port, 'POST', '/api/sessions', { body: { file: htmlArtifact } })).key;
+    assert.ok(!(await request(port, 'GET', `/canvas/${plainKey}`)).body.includes('rel="manifest"'), 'plain page: no manifest');
+    assert.strictEqual((await request(port, 'GET', `/manifest/${plainKey}.webmanifest`)).statusCode, 404);
+  })) passed++; else failed++;
+
   if (await test('requests with a non-loopback Host header are rejected', async () => {
     const res = await request(port, 'GET', '/health', { headers: { host: 'evil.example.com' } });
     assert.strictEqual(res.statusCode, 403);
