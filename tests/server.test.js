@@ -717,6 +717,77 @@ async function main() {
     sse.close();
   })) passed++; else failed++;
 
+  // Live feed (spec 2026-11-18, E1): X.feed.json beside X.html is a stream of
+  // card updates for the open page — an SSE `feed`, never a reload.
+  const feedPage = path.join(tmp, 'pult.html');
+  const feedFile = path.join(tmp, 'pult.feed.json');
+  fs.writeFileSync(feedPage, '<!DOCTYPE html><html><body><h1>Pult</h1></body></html>');
+  const feedKey = jsonBody(await request(port, 'POST', '/api/sessions', { body: { file: feedPage } })).key;
+  await new Promise(r => setTimeout(r, 500)); // macOS replays the page's own creation to a fresh watcher
+
+  if (await test('feed: writing X.feed.json emits SSE feed with its content and no reload', async () => {
+    const sse = openSse(port, feedKey);
+    await sse.ready;
+    fs.writeFileSync(feedFile, JSON.stringify({ base: 'b1', posts: [{ id: 'A|-' }] }));
+    await waitFor(() => sse.received.some(e => e.event === 'feed'), { timeoutMs: 4000 });
+    await new Promise(r => setTimeout(r, 400)); // a reload would have landed by now
+    assert.deepStrictEqual(sse.received.find(e => e.event === 'feed').data, { base: 'b1', posts: [{ id: 'A|-' }] });
+    assert.ok(!sse.received.some(e => e.event === 'reload'), 'feed write must not reload the page');
+    sse.close();
+  })) passed++; else failed++;
+
+  if (await test('feed: broken JSON is skipped, writing X.html still reloads', async () => {
+    const sse = openSse(port, feedKey);
+    await sse.ready;
+    await waitFor(() => sse.received.some(e => e.event === 'feed')); // current feed on connect
+    const before = sse.received.length;
+    fs.writeFileSync(feedFile, '{"base": "b2", "posts": [');
+    await new Promise(r => setTimeout(r, 500));
+    assert.deepStrictEqual(sse.received.slice(before).map(e => e.event), [], 'broken feed must not reach the page');
+    fs.appendFileSync(feedPage, '\n<!-- rebuilt -->');
+    await waitFor(() => sse.received.some(e => e.event === 'reload'), { timeoutMs: 4000 });
+    sse.close();
+  })) passed++; else failed++;
+
+  if (await test('feed: a new stream gets the current feed on connect', async () => {
+    fs.writeFileSync(feedFile, JSON.stringify({ base: 'b3', posts: [] }));
+    await new Promise(r => setTimeout(r, 300));
+    const sse = openSse(port, feedKey);
+    await sse.ready;
+    await waitFor(() => sse.received.some(e => e.event === 'feed'));
+    assert.strictEqual(sse.received.find(e => e.event === 'feed').data.base, 'b3');
+    sse.close();
+  })) passed++; else failed++;
+
+  // E2: page storage survives the iframe being recreated — the server writes
+  // what the page saved straight into the stand-in it serves.
+  if (await test('storage: saved values are seeded into the stand-in, per page, capped at 64 KB', async () => {
+    const save = (k, body) => request(port, 'POST', `/api/session/${k}/storage`, { body });
+    const ok = await save(feedKey, { localStorage: { theme: 'dark' }, sessionStorage: { 'filt:/p': 'harness' } });
+    assert.strictEqual(ok.statusCode, 200);
+    const page = (await request(port, 'GET', `/artifact/${feedKey}/`)).body;
+    const shim = page.slice(0, page.indexOf('</script>'));
+    assert.ok(shim.includes('"filt:/p":"harness"') && shim.includes('"theme":"dark"'), 'saved values are not in the stand-in');
+    const other = (await request(port, 'GET', `/artifact/${htmlKey}/`)).body;
+    assert.ok(!other.includes('filt:/p'), 'another page sees this page storage');
+    const sibling = (await request(port, 'GET', `/artifact/${feedKey}/case-study.html`)).body;
+    assert.ok(!sibling.includes('filt:/p'), 'a sibling page sees the root page storage');
+    const big = await save(feedKey, { localStorage: { x: 'y'.repeat(70 * 1024) } });
+    assert.strictEqual(big.statusCode, 413);
+    const bad = await save(feedKey, { localStorage: { x: 1 } });
+    assert.strictEqual(bad.statusCode, 400, 'non-string values are refused');
+    const evil = await save(feedKey, { localStorage: { x: '</script><script>alert(1)</script>' } });
+    assert.strictEqual(evil.statusCode, 200);
+    const served = (await request(port, 'GET', `/artifact/${feedKey}/`)).body;
+    assert.ok(!served.slice(0, served.indexOf('<h1>')).includes('alert(1)</script>'), 'stored value broke out of the stand-in script');
+    // the seed is part of the document: a cached copy must not bring old values back
+    const etag = (await request(port, 'GET', `/artifact/${feedKey}/`)).headers.etag;
+    await save(feedKey, { localStorage: {} });
+    const again = await request(port, 'GET', `/artifact/${feedKey}/`, { headers: { 'if-none-match': etag } });
+    assert.strictEqual(again.statusCode, 200, 'storage changed but the page revalidated as 304');
+    assert.ok(again.body.includes('"filt:/p":"harness"') && !again.body.includes('alert(1)'), 'sessionStorage kept, localStorage replaced');
+  })) passed++; else failed++;
+
   if (await test('send-and-end delivers the final batch and ends the session', async () => {
     const awaitPromise = request(port, 'GET', `/api/await?file=${encodeURIComponent(artifact)}`);
     await waitFor(() => canvas.presenceFor(key) === 'listening');
