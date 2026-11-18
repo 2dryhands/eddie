@@ -19,7 +19,7 @@ const path = require('path');
 
 const { createSessionStore } = require('../lib/sessions');
 const { createPlanCanvasServer } = require('../lib/server');
-const { CHROME, waitFor, launchChrome, Cdp, evaluate } = require('./cdp');
+const { SKIP, waitFor, launchChrome, Cdp, evaluate } = require('./cdp');
 
 const results = [];
 async function test(name, fn) {
@@ -36,8 +36,8 @@ async function test(name, fn) {
 
 async function main() {
   console.log('\n=== Testing notes on closed pages (real Chrome over CDP) ===\n');
-  if (!fs.existsSync(CHROME)) {
-    console.log(`  ↷ skipped: no Chrome at ${CHROME} (set EDDIE_TEST_CHROME)`);
+  if (SKIP) {
+    console.log(`  ↷ skipped: ${SKIP}`);
     console.log('\nPassed: 0\nFailed: 0');
     return 0;
   }

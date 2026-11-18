@@ -10,6 +10,12 @@ const { spawn } = require('child_process');
 
 const CHROME = process.env.EDDIE_TEST_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
+// Why the browser tests can't run here, or null. CDP talks over Node's global
+// WebSocket, which ships unflagged only from Node 22.
+const SKIP = !fs.existsSync(CHROME) ? `no Chrome at ${CHROME} (set EDDIE_TEST_CHROME)`
+  : typeof WebSocket === 'undefined' ? `no built-in WebSocket in Node ${process.version} (needs 22+)`
+    : null;
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function waitFor(predicate, { timeoutMs = 5000, intervalMs = 50, what = 'condition' } = {}) {
@@ -33,6 +39,8 @@ function launchChrome() {
     '--no-default-browser-check',
     '--disable-extensions',
     '--disable-background-timer-throttling',
+    // Ubuntu 23.10+ blocks Chrome's user-namespace sandbox for unprivileged users (CI runners).
+    ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
     'about:blank'
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
   return new Promise((resolve, reject) => {
@@ -88,4 +96,4 @@ async function evaluate(cdp, sessionId, expression, timeoutMs = 1500) {
   return Promise.race([call, sleep(timeoutMs).then(() => undefined)]);
 }
 
-module.exports = { CHROME, sleep, waitFor, launchChrome, Cdp, evaluate };
+module.exports = { CHROME, SKIP, sleep, waitFor, launchChrome, Cdp, evaluate };

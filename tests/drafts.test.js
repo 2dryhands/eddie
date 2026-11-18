@@ -34,7 +34,7 @@ const path = require('path');
 
 const { createSessionStore } = require('../lib/sessions');
 const { createPlanCanvasServer } = require('../lib/server');
-const { CHROME, sleep, waitFor, launchChrome, Cdp, evaluate } = require('./cdp');
+const { SKIP, sleep, waitFor, launchChrome, Cdp, evaluate } = require('./cdp');
 
 const results = [];
 async function test(name, fn) {
@@ -62,8 +62,8 @@ function page(build, cards, extra = '') {
 async function main() {
   console.log('\n=== Testing Eddie form drafts across reloads (real Chrome over CDP) ===\n');
 
-  if (!fs.existsSync(CHROME)) {
-    console.log(`  ↷ skipped: no Chrome at ${CHROME} (set EDDIE_TEST_CHROME)`);
+  if (SKIP) {
+    console.log(`  ↷ skipped: ${SKIP}`);
     console.log('\nPassed: 0\nFailed: 0');
     return 0;
   }

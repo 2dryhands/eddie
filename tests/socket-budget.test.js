@@ -34,7 +34,7 @@ const path = require('path');
 
 const { createSessionStore } = require('../lib/sessions');
 const { createPlanCanvasServer } = require('../lib/server');
-const { CHROME, sleep, waitFor, launchChrome, Cdp, evaluate } = require('./cdp');
+const { SKIP, sleep, waitFor, launchChrome, Cdp, evaluate } = require('./cdp');
 
 const MAX_STREAMS = 4;          // the ration under test
 const LOAD_DEADLINE_MS = 8000;
@@ -93,8 +93,8 @@ const clickPresence = (cdp, sessionId) =>
 async function main() {
   console.log('\n=== Testing Eddie socket budget (real Chrome over CDP) ===\n');
 
-  if (!fs.existsSync(CHROME)) {
-    console.log(`  ↷ skipped: no Chrome at ${CHROME} (set EDDIE_TEST_CHROME)`);
+  if (SKIP) {
+    console.log(`  ↷ skipped: ${SKIP}`);
     console.log('\nPassed: 0\nFailed: 0');
     return 0;
   }
