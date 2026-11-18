@@ -78,7 +78,7 @@ async function setHidden(cdp, sessionId, hidden) {
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => '${state}' });
     document.dispatchEvent(new Event('visibilitychange'));
     return document.visibilityState;
-  })()`);
+  })()`, 10000); // one-shot, not a poll: a slow CI runner needs more than the 1.5s default
   assert.strictEqual(got, state, `tab did not accept visibilityState=${state}`);
 }
 
