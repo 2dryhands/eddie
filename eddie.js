@@ -370,6 +370,7 @@ async function cmdServer(args, { stateDir, port }) {
     version: VERSION,
     idleTimeoutMs: resolveIdleTimeoutMs(),
     maxStreams: resolveMaxStreams(),
+    courierFile: path.join(stateDir, 'courier'),
     onIdleShutdown: () => shutdown(0),
     log: line => process.stderr.write(`${line}\n`)
   });

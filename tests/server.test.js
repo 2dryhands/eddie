@@ -553,6 +553,18 @@ async function main() {
     sse.close();
   })) passed++; else failed++;
 
+  if (await test('courier pulse: no agent on the page, but a fresh courier file says notes get delivered', async () => {
+    // 18.11, Gosha: "why is no agent on duty in the pult?" — one was, the chip just did not know
+    const pulse = path.join(tmp, 'courier');
+    const solo = createPlanCanvasServer({ store, version: '9.9.9-test', idleTimeoutMs: 0, courierFile: pulse });
+    assert.strictEqual(solo.presenceFor(key), 'waiting'); // no pulse file
+    fs.writeFileSync(pulse, '');
+    assert.strictEqual(solo.presenceFor(key), 'courier');
+    const old = (Date.now() - 11 * 60000) / 1000;
+    fs.utimesSync(pulse, old, old);
+    assert.strictEqual(solo.presenceFor(key), 'waiting'); // no pulse for 10 min: courier is down, say so
+  })) passed++; else failed++;
+
   if (await test('agent took notes and vanished: new untaken notes turn "thinking" into "not connected"', async () => {
     // 16.11, post-editor page: chip said "agent thinking…", the agent was long gone, fresh notes sat 10 minutes
     await request(port, 'POST', `/api/session/${key}/feedback`, { body: { items: [{ kind: 'chat', text: 'one' }] } });
