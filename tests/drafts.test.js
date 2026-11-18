@@ -34,7 +34,7 @@ const path = require('path');
 
 const { createSessionStore } = require('../lib/sessions');
 const { createPlanCanvasServer } = require('../lib/server');
-const { SKIP, sleep, waitFor, launchChrome, Cdp, evaluate } = require('./cdp');
+const { SKIP, sleep, waitFor, launchChrome, closeChrome, Cdp, evaluate } = require('./cdp');
 
 const results = [];
 async function test(name, fn) {
@@ -271,14 +271,9 @@ async function main() {
       assert.strictEqual(await inFrame("localStorage.getItem('k') + '/' + sessionStorage.getItem('s') + '/' + localStorage.length"), '2/1/1');
     });
   } finally {
-    const exited = child.exitCode !== null || child.signalCode !== null
-      ? Promise.resolve() : new Promise(r => child.once('exit', r));
-    child.kill('SIGKILL');
-    await exited;
+    await closeChrome(child, dir);
     await canvas.close().catch(() => {});
-    const rm = p => fs.rmSync(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-    rm(tmp);
-    rm(dir);
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 
   const passed = results.filter(Boolean).length;

@@ -34,7 +34,7 @@ const path = require('path');
 
 const { createSessionStore } = require('../lib/sessions');
 const { createPlanCanvasServer } = require('../lib/server');
-const { SKIP, sleep, waitFor, launchChrome, Cdp, evaluate } = require('./cdp');
+const { SKIP, sleep, waitFor, launchChrome, closeChrome, Cdp, evaluate } = require('./cdp');
 
 const MAX_STREAMS = 4;          // the ration under test
 const LOAD_DEADLINE_MS = 8000;
@@ -217,16 +217,9 @@ async function main() {
   } finally {
     // Always: a failed run used to leave a headless Chrome alive, holding
     // sockets and answering Apple Events as if it were the real browser.
-    const exited = child.exitCode !== null || child.signalCode !== null
-      ? Promise.resolve() : new Promise(r => child.once('exit', r));
-    child.kill('SIGKILL');
-    await exited;
+    await closeChrome(child, dir);
     await canvas.close().catch(() => {});
-    // Chrome's helper processes can still be flushing the profile after the
-    // main process dies (ENOTEMPTY ~1 run in 3), so retry the removal.
-    const rm = p => fs.rmSync(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-    rm(tmp);
-    rm(dir);
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 
   const passed = results.filter(Boolean).length;

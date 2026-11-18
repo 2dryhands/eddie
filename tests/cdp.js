@@ -45,7 +45,7 @@ function launchChrome() {
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
   return new Promise((resolve, reject) => {
     let buf = '';
-    const timer = setTimeout(() => reject(new Error('no DevTools endpoint:\n' + buf)), 20000);
+    const timer = setTimeout(() => reject(new Error('no DevTools endpoint:\n' + buf)), 60000);
     child.stderr.on('data', d => {
       buf += d;
       const m = /DevTools listening on (ws:\/\/\S+)/.exec(buf);
@@ -53,6 +53,18 @@ function launchChrome() {
     });
     child.on('exit', code => { clearTimeout(timer); reject(new Error(`chrome exited ${code}\n${buf}`)); });
   });
+}
+
+// Kill Chrome and drop its profile. Helper processes can keep flushing the
+// profile after the main one dies (ENOTEMPTY), so a leftover temp dir is
+// logged, never a test failure.
+async function closeChrome(child, dir) {
+  const exited = child.exitCode !== null || child.signalCode !== null
+    ? Promise.resolve() : new Promise(r => child.once('exit', r));
+  child.kill('SIGKILL');
+  await exited;
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+  catch (e) { console.log(`  (left Chrome profile ${dir}: ${e.code})`); }
 }
 
 class Cdp {
@@ -96,4 +108,4 @@ async function evaluate(cdp, sessionId, expression, timeoutMs = 1500) {
   return Promise.race([call, sleep(timeoutMs).then(() => undefined)]);
 }
 
-module.exports = { CHROME, SKIP, sleep, waitFor, launchChrome, Cdp, evaluate };
+module.exports = { CHROME, SKIP, sleep, waitFor, launchChrome, closeChrome, Cdp, evaluate };
