@@ -16,6 +16,9 @@ const SKIP = !fs.existsSync(CHROME) ? `no Chrome at ${CHROME} (set EDDIE_TEST_CH
   : typeof WebSocket === 'undefined' ? `no built-in WebSocket in Node ${process.version} (needs 22+)`
     : null;
 
+// CI sets this where Chrome must run: a skip there would be a silent green.
+if (SKIP && process.env.EDDIE_REQUIRE_BROWSER === 'true') throw new Error(`browser tests required but ${SKIP}`);
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function waitFor(predicate, { timeoutMs = 5000, intervalMs = 50, what = 'condition' } = {}) {

@@ -2,11 +2,37 @@
   "name": "eddie-canvas",
   "version": "0.1.15",
   "description": "Eddie - browser review canvas for agent-written plans and reports. Point, annotate, approve.",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "ai-agents",
+    "human-in-the-loop",
+    "review",
+    "canvas",
+    "feedback",
+    "markdown"
+  ],
+  "homepage": "https://github.com/2dryhands/eddie#readme",
+  "bugs": {
+    "url": "https://github.com/2dryhands/eddie/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/2dryhands/eddie.git"
+  },
+  "author": "Dryhands (https://github.com/2dryhands)",
   "license": "MIT",
   "bin": {
     "eddie": "./eddie.js"
   },
   "main": "lib/server.js",
+  "files": [
+    "eddie.js",
+    "lib/",
+    "skills/",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=18"
   },
