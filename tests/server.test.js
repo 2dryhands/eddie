@@ -786,6 +786,12 @@ async function main() {
     const again = await request(port, 'GET', `/artifact/${feedKey}/`, { headers: { 'if-none-match': etag } });
     assert.strictEqual(again.statusCode, 200, 'storage changed but the page revalidated as 304');
     assert.ok(again.body.includes('"filt:/p":"harness"') && !again.body.includes('alert(1)'), 'sessionStorage kept, localStorage replaced');
+    // the same values again must not touch sessions.json: it is watched, a rewrite wakes the pult (loop, review 18.11)
+    const file = path.join(tmp, 'state', 'sessions.json');
+    const before = fs.statSync(file).mtimeMs;
+    await new Promise(r => setTimeout(r, 20));
+    assert.strictEqual((await save(feedKey, { localStorage: {} })).statusCode, 200);
+    assert.strictEqual(fs.statSync(file).mtimeMs, before, 'unchanged storage rewrote sessions.json');
   })) passed++; else failed++;
 
   if (await test('send-and-end delivers the final batch and ends the session', async () => {
