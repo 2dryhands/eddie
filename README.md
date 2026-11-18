@@ -17,6 +17,14 @@
 
 ### Быстрый старт
 
+В Claude Code (2.1.275+) — одна строка, и агент сам знает, когда звать Eddie:
+
+```
+/plugin install eddie --marketplace 2dryhands/eddie
+```
+
+Без Claude Code:
+
 ```bash
 # Запустить без установки (Node.js ≥ 18)
 npx github:2dryhands/eddie open plan.md
@@ -113,6 +121,14 @@ just Node.js and a local HTTP server on `127.0.0.1`. It started as a
 spun-off, evolved version of the `plan-canvas` tool.
 
 ### Quick start
+
+In Claude Code (2.1.275+), one line, and the agent knows when to reach for Eddie:
+
+```
+/plugin install eddie --marketplace 2dryhands/eddie
+```
+
+Without Claude Code:
 
 ```bash
 # Run without installing (Node.js ≥ 18)

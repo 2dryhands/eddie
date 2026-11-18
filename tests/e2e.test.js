@@ -259,7 +259,8 @@ async function main() {
         ].join('\n')
       );
 
-      const opened = cli(env, ['open', plan2, '--no-open']);
+      // Flags may come before the file: agents write `open --no-open plan.md`.
+      const opened = cli(env, ['open', '--no-open', plan2]);
       assert.strictEqual(opened.status, 0, opened.stderr);
       assert.strictEqual(opened.parsed.status, 'open');
       const key2 = opened.parsed.url.split('/canvas/')[1];

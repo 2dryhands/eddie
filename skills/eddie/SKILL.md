@@ -33,8 +33,14 @@ canvas serves local artifact files only.
 
 ## How It Works
 
-The CLI binary is `eddie` (`node eddie.js` if running from a clone that
-hasn't been linked). It manages a detached loopback server
+The CLI is called `eddie` below. Pick the first command that works and use
+it for every `eddie` in this skill:
+
+1. Installed as a Claude Code plugin: `node "${CLAUDE_SKILL_DIR}/../../eddie.js"`
+2. On PATH (`npm install -g github:2dryhands/eddie`): `eddie`
+3. Anything else (Node.js ≥ 18): `npx -y github:2dryhands/eddie`
+
+It manages a detached loopback server
 (`127.0.0.1:4519` by default) shared by all sessions, keyed by artifact file
 path — no session ids to track.
 

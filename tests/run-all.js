@@ -5,7 +5,7 @@ const path = require('path');
 // `--quick` (smoke.py / quick verify) skips them; plain `npm test` (verify --full) runs everything.
 const HEAVY = ['e2e.test.js', 'socket-budget.test.js', 'drafts.test.js', 'closed-page.test.js', 'live-feed.test.js'];
 const quick = process.argv.includes('--quick');
-const files = ['i18n.test.js', 'sessions.test.js', 'markdown.test.js', 'server.test.js', ...(quick ? [] : HEAVY)];
+const files = ['i18n.test.js', 'plugin.test.js', 'sessions.test.js', 'markdown.test.js', 'server.test.js', ...(quick ? [] : HEAVY)];
 let failed = false;
 for (const file of files) {
   console.log(`\n== ${file} ==`);

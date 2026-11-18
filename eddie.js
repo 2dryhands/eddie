@@ -63,6 +63,18 @@ function usage() {
   ].join('\n');
 }
 
+// Flags that take a value: their value is never the file argument.
+const VALUE_FLAGS = new Set(['--reply', '--resolve', '--timeout-ms', '--port', '--host']);
+
+// The file is the first non-flag argument, so `open --no-open plan.md` works too.
+function fileArg(args) {
+  for (let i = 0; i < args.length; i++) {
+    if (VALUE_FLAGS.has(args[i])) i++;
+    else if (!args[i].startsWith('--')) return args[i];
+  }
+  return undefined;
+}
+
 function valueAfter(args, name) {
   const index = args.indexOf(name);
   return index >= 0 && index + 1 < args.length ? args[index + 1] : null;
@@ -403,9 +415,9 @@ async function main(argv = process.argv.slice(2)) {
   const context = { stateDir, port: (recorded && recorded.port) || resolvePort() };
   try {
     if (command === null) output(await cmdStatus(context));
-    else if (command === 'open') output(await cmdOpen(args[0], args, context));
-    else if (command === 'await') output(await cmdAwait(args[0], args, context));
-    else if (command === 'end') output(await cmdEnd(args[0], context));
+    else if (command === 'open') output(await cmdOpen(fileArg(args), args, context));
+    else if (command === 'await') output(await cmdAwait(fileArg(args), args, context));
+    else if (command === 'end') output(await cmdEnd(fileArg(args), context));
     else if (command === 'stop') output(await cmdStop(context));
     else if (command === 'server') await cmdServer(args, context);
     else {

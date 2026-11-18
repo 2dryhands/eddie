@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "eddie",
+  "description": "Eddie - browser review canvas for AI agents.",
+  "owner": { "name": "Dryhands", "url": "https://github.com/2dryhands" },
+  "plugins": [
+    {
+      "name": "eddie",
+      "description": "Show plans and reports in a local browser canvas; get the human's annotations, edits and verdict back as JSON.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

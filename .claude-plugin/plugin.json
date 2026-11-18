@@ -1,0 +1,10 @@
+{
+  "name": "eddie",
+  "version": "0.1.15",
+  "description": "Browser review canvas for agent-written plans and reports: the human points, annotates, edits text and approves; the agent gets structured JSON back.",
+  "author": { "name": "Dryhands", "url": "https://github.com/2dryhands" },
+  "homepage": "https://github.com/2dryhands/eddie",
+  "repository": "https://github.com/2dryhands/eddie",
+  "license": "MIT",
+  "keywords": ["review", "canvas", "feedback", "plan", "human-in-the-loop"]
+}
