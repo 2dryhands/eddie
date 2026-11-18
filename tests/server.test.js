@@ -581,7 +581,7 @@ async function main() {
   })) passed++; else failed++;
 
   if (await test('courier pulse: no agent on the page, but a fresh courier file says notes get delivered', async () => {
-    // 18.11, Gosha: "why is no agent on duty in the pult?" — one was, the chip just did not know
+    // 18.11, owner: "why is no agent on duty on this page?" — one was, the chip just did not know
     const pulse = path.join(tmp, 'courier');
     const solo = createPlanCanvasServer({ store, version: '9.9.9-test', idleTimeoutMs: 0, courierFile: pulse });
     assert.strictEqual(solo.presenceFor(key), 'waiting'); // no pulse file
@@ -593,7 +593,7 @@ async function main() {
   })) passed++; else failed++;
 
   if (await test('note trail: presence carries the count of untaken notes, taking them zeroes it', async () => {
-    // 18.11, Gosha: "don't post 'seen it, will carry' in chat — a status bar": the strip reads this count
+    // 18.11, owner: "don't post 'seen it, will carry' in chat — a status bar": the strip reads this count
     const solo = createPlanCanvasServer({ store, version: '9.9.9-test', idleTimeoutMs: 0 });
     store.takeFeedback(key);
     assert.strictEqual(solo.presencePayload(key).pending, 0);
