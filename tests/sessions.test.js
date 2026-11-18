@@ -58,13 +58,14 @@ function runTests() {
     assert.ok(path.isAbsolute(abs));
   })) passed++; else failed++;
 
-  if (test('chat label: the page shows a human line in the chat log, the agent still gets the raw text', () => {
-    const it = normalizeFeedbackItem({ kind: 'chat', text: 'pult:show abc -\n', label: 'Открыть в bb «Инбокс»' }, 1);
-    assert.strictEqual(it.text, 'pult:show abc -\n');
-    assert.strictEqual(chatLineFor(it), 'Открыть в bb «Инбокс»');
-    assert.strictEqual(chatLineFor(normalizeFeedbackItem({ kind: 'chat', text: 'hi', label: '  ' }, 2)), 'hi');
-    assert.strictEqual(chatLineFor(normalizeFeedbackItem({ kind: 'chat', text: 'hi', label: 42 }, 3)), 'hi');
-    assert.ok(normalizeFeedbackItem({ kind: 'chat', text: 'hi', label: 'x'.repeat(500) }, 4).label.length <= 200);
+  if (test('silent chat: a page command reaches the agent but not the chat log or the task list', () => {
+    const { artifact, store } = makeFixture();
+    const key = store.open(artifact).session.key;
+    store.queueFeedback(key, [{ kind: 'chat', text: 'pult:show abc -\n', silent: true }, { kind: 'chat', text: 'hi', silent: 'yes' }]);
+    assert.deepStrictEqual(store.get(key).chat.map(e => e.text), ['hi']);
+    const got = store.takeFeedback(key);
+    assert.deepStrictEqual(got.items.map(i => i.text), ['pult:show abc -\n', 'hi']);
+    assert.deepStrictEqual(store.get(key).tasks.map(t => t.text), ['hi']);
   })) passed++; else failed++;
 
   if (test('normalizeFeedbackItem accepts chat, annotation, verdict', () => {
