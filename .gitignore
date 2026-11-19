@@ -13,3 +13,5 @@ verify.py
 .aislop
 .githooks
 docs/TODO.md
+site/_build/
+_site/

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Launch plan · pricing page</title>
+<style>
+  body{font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1d2030;background:#fff;margin:0}
+  .doc{max-width:720px;margin:0 auto;padding:36px 24px 80px}
+  h1{font-size:26px;line-height:1.25;margin:0 0 6px}
+  .sub{color:#6a6f85;margin:0 0 26px}
+  h2{font-size:18px;margin:28px 0 8px}
+  .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0}
+  .tier{border:1px solid #e3e5ee;border-radius:10px;padding:14px}
+  .tier b{display:block;font-size:15px}
+  .price{font-size:24px;font-weight:700;margin:4px 0}
+  .tier.hot{border-color:#6885e8;box-shadow:0 0 0 3px rgba(104,133,232,.15)}
+  ul{padding-left:1.3em}
+  li{margin:.3em 0}
+  .risk{background:#fff6e5;border-left:3px solid #f0a020;padding:8px 12px;border-radius:0 6px 6px 0}
+</style>
+</head>
+<body>
+<article class="doc">
+  <h1>Launch plan: new pricing page</h1>
+  <p class="sub">Draft by your agent · click anything to leave a note, double-click text to edit it</p>
+
+  <h2>Goal</h2>
+  <p>Lift trial-to-paid conversion from 3.1% to 4% within six weeks of launch.</p>
+
+  <h2>Tiers</h2>
+  <div class="tiers">
+    <div class="tier"><b>Starter</b><div class="price">$0</div>1 project, community support</div>
+    <div class="tier hot"><b>Pro</b><div class="price">$19/mo</div>Unlimited projects, priority support</div>
+    <div class="tier"><b>Team</b><div class="price">$49/mo</div>5 seats, shared workspaces, SSO</div>
+  </div>
+
+  <h2>Steps</h2>
+  <ul>
+    <li>Ship the page behind a feature flag to 10% of visitors.</li>
+    <li>Run an A/B test against the current page for two weeks.</li>
+    <li>Roll out to everyone if conversion beats the baseline.</li>
+  </ul>
+
+  <h2>Risks</h2>
+  <p class="risk">Existing Pro users on the old $15 price may churn if we migrate them without notice.</p>
+</article>
+</body>
+</html>
