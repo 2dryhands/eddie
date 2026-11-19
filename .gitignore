@@ -12,3 +12,4 @@ smoke.py
 verify.py
 .aislop
 .githooks
+docs/TODO.md
