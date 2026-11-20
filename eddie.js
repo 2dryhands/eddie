@@ -48,6 +48,7 @@ function usage() {
     '  node eddie.js await <file>         Block until the human sends feedback',
     '  node eddie.js end <file>           End a session as the agent',
     '  node eddie.js stop                 Shut down the canvas server',
+    '  node eddie.js plan-hook            Claude Code ExitPlanMode hook (reads hook JSON on stdin)',
     '  node eddie.js server               Run the server in the foreground',
     '',
     'Options:',
@@ -59,7 +60,7 @@ function usage() {
     '         --timeout-ms <n>  Return {status:"waiting"} after n ms (tests/debug only)',
     '  server: --port <n> --host <h>',
     '',
-    'Environment: EDDIE_PORT, EDDIE_STATE_DIR, EDDIE_IDLE_MS, EDDIE_MAX_STREAMS'
+    'Environment: EDDIE_PORT, EDDIE_STATE_DIR, EDDIE_IDLE_MS, EDDIE_MAX_STREAMS, EDDIE_PLAN_REVIEW=off'
   ].join('\n');
 }
 
@@ -349,6 +350,86 @@ async function cmdAwait(file, args, { stateDir, port }) {
   return result;
 }
 
+// Claude Code PermissionRequest hook on ExitPlanMode (hooks/hooks.json): the
+// plan opens in the canvas and the human's verdict answers the approval step.
+// Returns null — print nothing — whenever the canvas can't answer (switched
+// off, bad input, review closed, server gone): Claude Code then shows its own
+// terminal prompt, so the human is never left without a way to reply.
+async function cmdPlanHook(args, context, stdin) {
+  if (process.env.EDDIE_PLAN_REVIEW === 'off') return null;
+  let input;
+  try {
+    input = JSON.parse(stdin);
+  } catch {
+    return null;
+  }
+  const toolInput = (input && input.tool_input) || {};
+  let file = toolInput.planFilePath;
+  if (!file || !fs.existsSync(file)) {
+    if (typeof toolInput.plan !== 'string' || !toolInput.plan.trim()) return null;
+    const dir = path.join(context.stateDir, 'plans');
+    fs.mkdirSync(dir, { recursive: true });
+    file = path.join(dir, `${String(input.session_id || 'plan').replace(/[^\w-]/g, '_')}.md`);
+    fs.writeFileSync(file, toolInput.plan);
+  }
+  // A verdict clicked before this call saw an older version of the plan: it
+  // must not approve this one. Notes from then are still delivered.
+  const since = Date.now();
+  const opened = await cmdOpen(file, args, context);
+  if (opened.status !== 'open') return null;
+  // No canvas tab for two checks in a row (closed, or the browser never
+  // opened): give the question back to the terminal instead of hanging.
+  const graceMs = Number.parseInt(process.env.EDDIE_PLAN_TAB_GRACE_MS, 10) || 30000;
+  let tablessChecks = 0;
+  for (;;) {
+    const result = await awaitRequest(context.port, path.resolve(file), graceMs);
+    if (result.status === 'waiting') {
+      const list = await request(context.port, 'GET', '/api/sessions');
+      const me = (list.body.sessions || []).find(x => x.file === opened.file || x.key === opened.url.split('/canvas/')[1]);
+      tablessChecks = me && me.liveTab ? 0 : tablessChecks + 1;
+      if (tablessChecks >= 2) return null;
+      continue;
+    }
+    if (result.status !== 'feedback') return null;
+    const approved = result.items.some(i => i.kind === 'verdict' && i.verdict === 'approve' && Date.parse(i.at) >= since);
+    const changes = result.items.some(i => i.kind === 'verdict' && i.verdict === 'request-changes' && Date.parse(i.at) >= since);
+    const notes = result.items.filter(i => i.kind !== 'verdict' && i.kind !== 'rating' && !i.silent);
+    let decision;
+    if (approved) {
+      let plan = fs.readFileSync(file, 'utf8');
+      if (notes.length) plan += `\n\n## Reviewer notes\n\n${notes.map(n => `- ${noteLine(n)}`).join('\n')}\n`;
+      decision = { behavior: 'allow', updatedInput: { ...toolInput, plan } };
+    } else if (notes.length || changes) {
+      decision = {
+        behavior: 'deny',
+        message: 'The human reviewed the plan in the Eddie canvas and asked for changes. Revise the plan file to address ' +
+          `every item below, then call ExitPlanMode again (the canvas reloads by itself).\n${JSON.stringify(notes, null, 2)}`
+      };
+    } else {
+      continue; // only a rating: nothing to act on, keep waiting
+    }
+    return { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } };
+  }
+}
+
+function noteLine(item) {
+  const where = item.anchor && item.anchor.snippet ? ` (on "${item.anchor.snippet}")` : '';
+  const edit = item.edit ? ` ${JSON.stringify(item.edit)}` : '';
+  return `${item.text || ''}${edit}${where}`.trim();
+}
+
+function readStdin() {
+  return new Promise(resolve => {
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', chunk => {
+      data += chunk;
+    });
+    process.stdin.on('end', () => resolve(data));
+    process.stdin.on('error', () => resolve(data));
+  });
+}
+
 async function cmdEnd(file, { port }) {
   if (!file) throw new Error('end requires a file path');
   if (!(await healthCheck(port))) return { status: 'no-server' };
@@ -413,6 +494,12 @@ async function main(argv = process.argv.slice(2)) {
   // A running server may sit on a non-default port; trust its recorded info.
   const recorded = readServerInfo(stateDir);
   const context = { stateDir, port: (recorded && recorded.port) || resolvePort() };
+  if (command === 'plan-hook') {
+    // A hook must never print anything but its decision: errors stay silent.
+    const decision = await cmdPlanHook(args, context, await readStdin()).catch(() => null);
+    if (decision) output(decision);
+    return 0;
+  }
   try {
     if (command === null) output(await cmdStatus(context));
     else if (command === 'open') output(await cmdOpen(fileArg(args), args, context));

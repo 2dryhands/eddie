@@ -49,6 +49,10 @@ flowchart TD
   B -->|"Закоммитить (verdict: approve)"| F["Агент: eddie end"]
 ```
 
+### Ревью плана из plan mode
+
+С плагином ничего вызывать не нужно: агент в plan mode Claude Code дописал план — план сам открывается в канвасе вместо окна «одобрить?» в терминале. «Закоммитить» — агент выходит из plan mode и строит, пометки с «Отправить» — агент правит план и показывает его снова в той же вкладке. Закрыли канвас — вопрос вернётся в терминал. Выключить: `EDDIE_PLAN_REVIEW=off`.
+
 ### Протокол — коротко
 
 `await` возвращает JSON с элементами четырёх видов: `chat` (сообщение),
@@ -153,6 +157,10 @@ flowchart TD
   E -->|"eddie await --reply ... --resolve ..."| B
   B -->|"Ship it (verdict: approve)"| F["Agent: eddie end"]
 ```
+
+### Plan mode review
+
+With the plugin installed there is nothing to call: when the agent in Claude Code plan mode finishes a plan, it opens in the canvas instead of the terminal "approve?" prompt. **Ship it** lets the agent leave plan mode and build; notes sent with **Send** go back to the agent, which revises the plan and shows it again in the same tab. Close the canvas and the question falls back to the terminal. Turn it off with `EDDIE_PLAN_REVIEW=off`.
 
 ### Protocol, briefly
 

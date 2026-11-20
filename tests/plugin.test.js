@@ -14,4 +14,9 @@ const skill = fs.readFileSync(path.join(root, 'skills/eddie/SKILL.md'), 'utf8');
 assert.ok(/^name: eddie$/m.test(skill), 'skill frontmatter names it eddie');
 assert.ok(skill.includes('${CLAUDE_SKILL_DIR}/../../eddie.js') && fs.existsSync(path.join(root, 'eddie.js')),
   'skill points at eddie.js two levels up from its folder');
+const hook = read('hooks/hooks.json').hooks.PermissionRequest.find(h => h.matcher === 'ExitPlanMode');
+assert.ok(hook && /\$\{CLAUDE_PLUGIN_ROOT\}\/eddie\.js" plan-hook$/.test(hook.hooks[0].command),
+  'plan mode hook runs eddie.js plan-hook from the plugin root');
+assert.ok(pkg.files.includes('hooks/'), 'npm package ships hooks/');
+console.log('  ✓ plan mode hook: ExitPlanMode → eddie.js plan-hook');
 console.log('  ✓ plugin manifests agree with package.json (' + pkg.version + ')');

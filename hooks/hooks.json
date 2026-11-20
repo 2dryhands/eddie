@@ -1,0 +1,13 @@
+{
+  "description": "Plan mode: open the finished plan in the Eddie canvas; the human's verdict answers the approval step. Set EDDIE_PLAN_REVIEW=off to keep the terminal prompt.",
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/eddie.js\" plan-hook", "timeout": 7200 }
+        ]
+      }
+    ]
+  }
+}

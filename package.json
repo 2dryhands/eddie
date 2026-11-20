@@ -29,6 +29,7 @@
   "files": [
     "eddie.js",
     "lib/",
+    "hooks/",
     "skills/",
     "README.md",
     "LICENSE"
