@@ -23,6 +23,7 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 
 const {
+  askOptionsProblem,
   canonicalizeArtifactPath,
   createSessionStore,
   resolveStateDir,
@@ -57,6 +58,7 @@ function usage() {
     '         --new-tab      Launch a new tab even if one already shows the page',
     '  await: --reply <msg>  Show an agent reply in the canvas chat before waiting',
     '         --resolve <id>:<status>:<note>   Mark a task done|answered|declined (repeatable)',
+    '         --ask <question> --option <a> --option <b>   Ask with 2-6 answer buttons; the click comes back as kind "answer"',
     '         --timeout-ms <n>  Return {status:"waiting"} after n ms (tests/debug only)',
     '  server: --port <n> --host <h>',
     '',
@@ -65,7 +67,7 @@ function usage() {
 }
 
 // Flags that take a value: their value is never the file argument.
-const VALUE_FLAGS = new Set(['--reply', '--resolve', '--timeout-ms', '--port', '--host']);
+const VALUE_FLAGS = new Set(['--reply', '--ask', '--option', '--resolve', '--timeout-ms', '--port', '--host']);
 
 // The file is the first non-flag argument, so `open --no-open plan.md` works too.
 function fileArg(args) {
@@ -309,6 +311,14 @@ async function cmdAwait(file, args, { stateDir, port }) {
   if (!(await healthCheck(port))) {
     return { status: 'no-server', hint: 'no canvas server is running; use `open` first', stateDir };
   }
+  // Checked before anything is posted: a bad question must not half-reach the canvas.
+  const ask = valueAfter(args, '--ask');
+  const options = args.flatMap((a, i) => (a === '--option' && i + 1 < args.length ? [args[i + 1]] : []));
+  if (ask !== null || options.length) {
+    if (!ask || !ask.trim()) throw new Error('--option needs --ask "<question>"');
+    const problem = askOptionsProblem(options);
+    if (problem) throw new Error(`--ask: ${problem}`);
+  }
   const reply = valueAfter(args, '--reply');
   if (reply) {
     const key = sessionKeyFor(canonicalizeArtifactPath(file));
@@ -318,6 +328,11 @@ async function cmdAwait(file, args, { stateDir, port }) {
         `[eddie] --reply failed (HTTP ${res.statusCode}): ${res.body.error || 'unknown error'} — the reply did not reach the canvas; the await below still runs\n`
       );
     }
+  }
+  if (ask) {
+    const key = sessionKeyFor(canonicalizeArtifactPath(file));
+    const res = await request(port, 'POST', `/api/session/${key}/reply`, { text: ask, options });
+    if (res.statusCode !== 200) throw new Error(`--ask failed (HTTP ${res.statusCode}): ${res.body.error || 'unknown error'}`);
   }
   const resolutions = parseResolveArgs(args);
   if (resolutions.length) {

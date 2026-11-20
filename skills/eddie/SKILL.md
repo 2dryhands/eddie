@@ -83,12 +83,24 @@ eddie await plan.md \
   --resolve "fb-1:done:Split into 3a/3b"
 ```
 
+**Need a decision? Ask with buttons** instead of a prose question — the
+human clicks, you get the choice as JSON (2–6 options):
+
+```bash
+eddie await plan.md --ask "Which layout for the pricing block?" \
+  --option "Cards" --option "Table" --option "Both, cards on phone"
+```
+
 **4. End** when review concludes: `eddie end plan.md`.
 
 ## Feedback Kinds
 
 - `kind: "chat"` — freeform message. Answer with `--reply` (shows up in the
   canvas chat), not in the terminal.
+- `kind: "answer"` (2026-11-20) — the human clicked a button of your `--ask`:
+  `{ "kind": "answer", "question": "...", "answer": "Table", "index": 1, "askId": "ask-7" }`.
+  `index` is 0-based in `--option` order. One answer per question; not a task,
+  nothing to `--resolve`. They may also just type in the chat instead (`kind: "chat"`).
 - `kind: "annotation"` — feedback anchored to an element (`anchor.selector`,
   `anchor.snippet` show what they pointed at; `anchor.textRange.text` when
   they highlighted a passage instead of clicking a whole block).
