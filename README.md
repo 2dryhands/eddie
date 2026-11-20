@@ -184,6 +184,9 @@ replacement, `before → after`, applied as-is), and `verdict`
 }
 ```
 
+A note or chat message with a pasted, dropped or attached picture carries
+`images`: absolute paths to the files, for the agent to read.
+
 Every item except `verdict` is a task the agent must close with
 `eddie await <file> --resolve "fb-1:done:replaced Q3 with Q4"`, using an
 honest status (`done` / `answered` / `declined`).

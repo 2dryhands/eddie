@@ -6,6 +6,7 @@ while the major version is 0, any minor release may change behaviour.
 ## [Unreleased]
 
 ### Added
+- Pictures in notes and chat: paste, drop or attach (📎) a PNG, JPEG, GIF or WebP in the note card or the message box; the agent gets `images` with absolute paths to the files.
 - Plan mode review: when Claude Code asks to approve a plan, the plan opens in the canvas by itself (a `PermissionRequest` hook on `ExitPlanMode`); Ship it approves, notes send the agent back to revise. `EDDIE_PLAN_REVIEW=off` keeps the terminal prompt.
 - Claude Code plugin: `/plugin install eddie --marketplace 2dryhands/eddie` installs the CLI and the skill in one line.
 - CI: `npm test` on Node 18, 20 and 22, Ubuntu and macOS. Browser tests fail the run instead of skipping silently.

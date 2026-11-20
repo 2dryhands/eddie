@@ -96,6 +96,11 @@ eddie await plan.md \
   human opened via a link inside the artifact (e.g. `case-study.html`, path
   relative to the artifact's folder): edit THAT file, not the opened one.
   Absent = the opened file. Live edit is off on sibling pages.
+- `images` (on `annotation` and `chat`, 2026-11-20) — pictures the human
+  pasted, dropped or attached: absolute paths to PNG/JPEG/GIF/WebP files in
+  Eddie's state dir (`~/.eddie/images/`). Read each one with your file/image
+  tool before acting — it is usually the point of the note ("make it like
+  this"). `text` may be empty when the picture says it all.
 - `kind: "edit"` — the human selected text and typed a replacement. Carries
   `edit.before` and `edit.after`. Apply it to the artifact file as an
   **exact text replacement** of `before` with `after` — do not paraphrase,
